@@ -10,15 +10,9 @@ wgrc_bridge = "AvqkRykFXfx31fDYnJq7kPkNpgiMA6LbknavHMvjz3Zy"
 
 [provider]
 cluster = "localnet"
-wallet = "~/.config/solana/id.json"
+wallet = "~/.config/solana/devnet.json"
 
 [hooks]
-
-[scripts]
-test = "npm test"
-
-[test]
-upgradeable = true
 
 [scripts]
 test = "npm test"

@@ -64,7 +64,7 @@ test("mints and redeems wGRC once per deposit ID and withdrawal nonce", async ()
     }));
   }
   setup.add(createAssociatedTokenAccountInstruction(admin, tokenAccount, holder.publicKey, mint));
-  await provider.sendAndConfirm(setup, [], { commitment: "confirmed" });
+  await provider.sendAndConfirm(setup);
 
   async function assertSupplyAndBalance(expected) {
     const mintState = await getMint(connection, mint, "confirmed");

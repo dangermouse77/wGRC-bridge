@@ -1,0 +1,9 @@
+[toolchain]
+anchor_version = "1.2.2"
+
+[programs.localnet]
+wgrc_bridge = "3Xj5BhvkX9ex4ksdnHDg9R3bZp17bRitfv6tEkTi1tsz"
+
+[provider]
+cluster = "localnet"
+wallet = "~/.config/solana/id.json"

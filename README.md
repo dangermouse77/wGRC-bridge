@@ -288,6 +288,40 @@ The test uses a fresh local validator and the wallet in `Anchor.toml` as the
 program's upgrade authority. It covers minting, redemption, unauthorized mint
 attempts, invalid withdrawal addresses, and deposit and withdrawal replays.
 
+If RPC startup times out and the log is empty, run the legacy validator in the
+foreground from a fresh ledger directory to see its startup output:
+
+```bash
+solana-test-validator --version
+solana-test-validator --ledger "$(mktemp -d)" --bind-address 127.0.0.1
+```
+
+Stop the diagnostic validator before rerunning Anchor. With a compatible
+Surfpool installation, use `anchor test --provider.cluster localnet` to run
+the same suite on Anchor's default validator backend.
+
+#### Devnet smoke test
+
+From the repository root, use the funded wallet configured as the mint
+operator on the initialized Devnet bridge:
+
+```bash
+anchor build
+export ANCHOR_PROVIDER_URL=https://api.devnet.solana.com
+export ANCHOR_WALLET="$HOME/.config/solana/devnet.json"
+export WGRC_TESTNET_GRIDCOIN_ADDRESS='<your Gridcoin Testnet address>'
+npm run test:devnet
+```
+
+If the earlier Devnet run left a temporary operator in bridge settings,
+set `ANCHOR_WALLET` to the bridge admin wallet and run
+`WGRC_ROTATE_DEVNET_OPERATOR=1 npm run test:devnet` once. This switches the
+configured operator to the admin wallet until the admin changes it again.
+
+Use a development deployment with payout processing disabled. The smoke
+test mints and burns one base unit in the same transaction and verifies
+the synthetic deposit receipt, withdrawal request, and ending token balance.
+
 The project will include automated tests for:
 
 - Bridge initialization.

@@ -2,7 +2,8 @@
   "name": "wgrc-bridge-tests",
   "private": true,
   "scripts": {
-    "test": "node --test tests/bridge.cjs"
+    "test": "node --test tests/bridge.cjs",
+    "test:devnet": "node --test tests/devnet.cjs"
   },
   "devDependencies": {
     "@anchor-lang/core": "1.2.2",

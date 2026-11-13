@@ -16,6 +16,11 @@ const UPGRADEABLE_LOADER = new PublicKey("BPFLoaderUpgradeab1e111111111111111111
 const WITHDRAWAL_ADDRESS = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT";
 
 test("mints and redeems wGRC once per deposit ID and withdrawal nonce", async () => {
+  const { hostname } = new URL(process.env.ANCHOR_PROVIDER_URL ?? "http://invalid");
+  assert.ok(
+    ["127.0.0.1", "localhost", "[::1]"].includes(hostname),
+    "Run this test with anchor test --provider.cluster localnet.",
+  );
   const environment = AnchorProvider.env();
   const provider = new AnchorProvider(environment.connection, environment.wallet, {
     commitment: "confirmed",

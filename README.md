@@ -288,17 +288,28 @@ The test uses a fresh local validator and the wallet in `Anchor.toml` as the
 program's upgrade authority. It covers minting, redemption, unauthorized mint
 attempts, invalid withdrawal addresses, and deposit and withdrawal replays.
 
-If RPC startup times out and the log is empty, run the legacy validator in the
-foreground from a fresh ledger directory to see its startup output:
+If Anchor times out waiting for RPC, start the legacy validator separately.
+In one terminal, launch a fresh ledger and leave the validator running:
 
 ```bash
 solana-test-validator --version
 solana-test-validator --ledger "$(mktemp -d)" --bind-address 127.0.0.1
 ```
 
-Stop the diagnostic validator before rerunning Anchor. With a compatible
-Surfpool installation, use `anchor test --provider.cluster localnet` to run
-the same suite on Anchor's default validator backend.
+In a second terminal, from the repository root, check RPC, fund the wallet
+configured in `Anchor.toml` with local SOL, and run the suite:
+
+```bash
+solana --url http://127.0.0.1:8899 cluster-version
+wallet="$HOME/.config/solana/devnet.json"
+solana --url http://127.0.0.1:8899 airdrop 10 "$(solana-keygen pubkey "$wallet")"
+anchor test --provider.cluster localnet --validator legacy --skip-local-validator
+```
+
+Use a fresh validator ledger for each run because the test initializes the
+bridge. If the validator exits or RPC stays unavailable, check the output
+in the first terminal. With a compatible Surfpool installation, you can
+also run `anchor test --provider.cluster localnet` on Anchor's default backend.
 
 #### Devnet smoke test
 

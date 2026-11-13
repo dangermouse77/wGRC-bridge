@@ -21,4 +21,5 @@ wallet = "~/.config/solana/devnet.json"
 test = "npm test"
 
 [test]
+startup_wait = 30000
 upgradeable = true

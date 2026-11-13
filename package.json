@@ -1,0 +1,12 @@
+{
+  "name": "wgrc-bridge-tests",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/bridge.cjs"
+  },
+  "devDependencies": {
+    "@anchor-lang/core": "1.2.2",
+    "@solana/spl-token": "0.4.14",
+    "@solana/web3.js": "1.98.4"
+  }
+}

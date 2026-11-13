@@ -276,6 +276,18 @@ The program ID must be consistent across the source code, Anchor configuration, 
 
 ### Testing
 
+Run the bridge integration test from the repository root on a machine with
+Node.js, npm, Anchor, and `solana-test-validator` installed:
+
+```bash
+npm install
+anchor test --validator legacy
+```
+
+The test uses a fresh local validator and the wallet in `Anchor.toml` as the
+program's upgrade authority. It covers minting, redemption, unauthorized mint
+attempts, invalid withdrawal addresses, and deposit and withdrawal replays.
+
 The project will include automated tests for:
 
 - Bridge initialization.

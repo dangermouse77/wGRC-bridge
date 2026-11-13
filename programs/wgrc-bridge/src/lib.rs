@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Burn, Mint, MintTo, Token, TokenAccount};
 
 // Replace this development address with the deployment keypair's public key.
-declare_id!("3Xj5BhvkX9ex4ksdnHDg9R3bZp17bRitfv6tEkTi1tsz");
+declare_id!("AvqkRykFXfx31fDYnJq7kPkNpgiMA6LbknavHMvjz3Zy");
 
 const WGRC_DECIMALS: u8 = 8;
 const MAX_GRIDCOIN_ADDRESS_LEN: usize = 35;

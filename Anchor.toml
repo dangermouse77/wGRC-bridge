@@ -8,8 +8,11 @@ skip-lint = false
 [programs.localnet]
 wgrc_bridge = "AvqkRykFXfx31fDYnJq7kPkNpgiMA6LbknavHMvjz3Zy"
 
+[programs.devnet]
+wgrc_bridge = "AvqkRykFXfx31fDYnJq7kPkNpgiMA6LbknavHMvjz3Zy"
+
 [provider]
-cluster = "localnet"
+cluster = "devnet"
 wallet = "~/.config/solana/devnet.json"
 
 [hooks]

@@ -281,7 +281,7 @@ Node.js, npm, Anchor, and `solana-test-validator` installed:
 
 ```bash
 npm install
-anchor test --validator legacy
+anchor test --provider.cluster localnet --validator legacy
 ```
 
 The test uses a fresh local validator and the wallet in `Anchor.toml` as the

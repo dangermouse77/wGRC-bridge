@@ -71,12 +71,12 @@ test("mints and redeems wGRC once per deposit ID and withdrawal nonce", async ()
   setup.add(createAssociatedTokenAccountInstruction(admin, tokenAccount, holder.publicKey, mint));
   await provider.sendAndConfirm(setup);
 
-  async function assertSupplyAndBalance(expected) {
+  async function assertSupplyAndBalance(expected, balance = expected) {
     const mintState = await getMint(connection, mint, "confirmed");
     assert.equal(mintState.decimals, 8);
     assert.ok(mintState.mintAuthority?.equals(mint));
     assert.equal(mintState.supply, expected);
-    assert.equal((await getAccount(connection, tokenAccount, "confirmed")).amount, expected);
+    assert.equal((await getAccount(connection, tokenAccount, "confirmed")).amount, balance);
   }
 
   const depositId = Buffer.alloc(32, 1);
@@ -116,12 +116,13 @@ test("mints and redeems wGRC once per deposit ID and withdrawal nonce", async ()
   );
   const burnAmount = 100_000_000;
 
-  function requestWithdrawal(amount, address) {
-    return program.methods.requestWithdrawal(nonce, new BN(amount), address).accountsStrict({
+  function requestWithdrawal(amount, address, requestNonce = nonce, withdrawal = withdrawalAddress) {
+    return program.methods.requestWithdrawal(requestNonce, new BN(amount), address).accountsStrict({
       ...commonAccounts,
       owner: holder.publicKey,
       ownerTokens: tokenAccount,
-      withdrawal: withdrawalAddress,
+      withdrawal,
+      vault: pda("vault", withdrawal.toBuffer()),
     }).signers([holder]).rpc();
   }
 
@@ -133,13 +134,45 @@ test("mints and redeems wGRC once per deposit ID and withdrawal nonce", async ()
   await assertSupplyAndBalance(BigInt(mintAmount));
 
   await requestWithdrawal(burnAmount, WITHDRAWAL_ADDRESS);
-  const withdrawal = await program.account.withdrawalRequest.fetch(withdrawalAddress, "confirmed");
+  const withdrawal = await program.account.escrowWithdrawal.fetch(withdrawalAddress, "confirmed");
   assert.ok(withdrawal.owner.equals(holder.publicKey));
   assert.equal(withdrawal.nonce.toNumber(), nonce.toNumber());
   assert.equal(withdrawal.amount.toNumber(), burnAmount);
   assert.equal(withdrawal.gridcoinAddress, WITHDRAWAL_ADDRESS);
-  await assertSupplyAndBalance(BigInt(mintAmount - burnAmount));
+  assert.deepEqual(withdrawal.status, { pending: {} });
+  await assertSupplyAndBalance(BigInt(mintAmount), BigInt(mintAmount - burnAmount));
 
   await assert.rejects(requestWithdrawal(burnAmount + 1, WITHDRAWAL_ADDRESS), /already in use/i);
+  function resolution(withdrawal, signer = operator) {
+    return {
+      bridge, mint, withdrawal,
+      vault: pda("vault", withdrawal.toBuffer()),
+      mintOperator: signer.publicKey,
+      tokenProgram: TOKEN_PROGRAM_ID,
+    };
+  }
+
+  const payoutTxid = Array(32).fill(7);
+  const settle = (address, signer = operator) => program.methods.settleWithdrawal(payoutTxid)
+    .accountsStrict(resolution(address, signer)).signers([signer]).rpc();
+  const cancel = (address) => program.methods.cancelWithdrawal().accountsStrict({
+    resolution: resolution(address),
+    refundTokens: tokenAccount,
+  }).signers([operator]).rpc();
+
+  await assert.rejects(settle(withdrawalAddress, holder), /Error Code: Unauthorized\b/);
+  await settle(withdrawalAddress);
+  const settled = await program.account.escrowWithdrawal.fetch(withdrawalAddress, "confirmed");
+  assert.deepEqual(settled.status.settled.gridcoinTxid, payoutTxid);
+  await assert.rejects(cancel(withdrawalAddress), /Error Code: WithdrawalResolved\b/);
+  await assertSupplyAndBalance(BigInt(mintAmount - burnAmount));
+
+  const cancelNonce = nonce.addn(1);
+  const cancelAddress = pda("withdrawal", holder.publicKey.toBuffer(), cancelNonce.toArrayLike(Buffer, "le", 8));
+  await requestWithdrawal(burnAmount, WITHDRAWAL_ADDRESS, cancelNonce, cancelAddress);
+  await cancel(cancelAddress);
+  const cancelled = await program.account.escrowWithdrawal.fetch(cancelAddress, "confirmed");
+  assert.deepEqual(cancelled.status, { cancelled: {} });
+  await assert.rejects(settle(cancelAddress), /Error Code: WithdrawalResolved\b/);
   await assertSupplyAndBalance(BigInt(mintAmount - burnAmount));
 });

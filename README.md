@@ -29,11 +29,15 @@ wGRC Bridge connects these ecosystems through a bidirectional wrapping mechanism
 **Solana → Gridcoin**
 
 1. A user requests redemption of wGRC.
-2. The Solana bridge program burns the specified amount of wGRC.
-3. A withdrawal request is recorded on-chain, including the destination Gridcoin address.
-4. The relayer verifies the finalized burn and withdrawal request.
-5. The Gridcoin payout operator transfers the corresponding GRC from the reserve.
-6. The relayer records the payout transaction and its confirmation status.
+2. The Solana program locks the requested wGRC in a dedicated escrow vault and records a pending withdrawal with the Gridcoin destination.
+3. The relayer verifies the finalized request and coordinates the reserve payout.
+4. Once the payout reaches the required Gridcoin confirmations, the operator submits its transaction ID to Solana. The bridge burns the locked wGRC and marks the request settled in the same transaction.
+5. If the operator establishes that the payout did not occur and can no longer confirm, it can cancel the request and return the locked wGRC to a token account owned by the requester.
+
+The configured mint operator also signs settlement and cancellation. Each
+request can reach one terminal state. Pending requests can be resolved while
+the bridge is paused. Requests created under the original burn-first program
+remain legacy records and require separate payout reconciliation.
 
 The intended conversion ratio is:
 
@@ -54,7 +58,7 @@ Responsible for:
 - Creating and managing the wGRC SPL token mint.
 - Authorizing mint operations.
 - Preventing duplicate minting of the same deposit identifier.
-- Burning wGRC during redemption.
+- Locking wGRC on request, burning it after payout confirmation, and returning it on safe cancellation.
 - Recording withdrawal requests on-chain.
 - Managing bridge administrators and operators.
 - Supporting emergency pause functionality.
@@ -73,7 +77,7 @@ Planned responsibilities:
 - Wait for configurable Gridcoin confirmations.
 - Submit authorized mint transactions to Solana.
 - Monitor finalized Solana withdrawal requests.
-- Coordinate Gridcoin redemption payments.
+- Coordinate Gridcoin redemption payments and submit settlement or cancellation instructions.
 - Handle restarts, retries, and blockchain reorganizations.
 - Reconcile reserve balances, circulating supply, and outstanding redemption obligations.
 
@@ -108,7 +112,7 @@ Example commands (proposed interface, not yet implemented):
 wgrc deposit 1000 \
   --solana-address <SOLANA_ADDRESS>
 
-# Burn 500 wGRC and request native GRC
+# Lock 500 wGRC and request native GRC
 wgrc withdraw 500 \
   --gridcoin-address <GRIDCOIN_ADDRESS>
 
@@ -167,7 +171,7 @@ Gridcoin `OP_RETURN` support and transaction construction must be verified again
 | Backing asset | Native Gridcoin (GRC) |
 | Target backing ratio | 1:1 |
 | Mint authority | Bridge program PDA |
-| Burn mechanism | Bridge program instruction |
+| Burn mechanism | Operator settles an escrowed withdrawal after Gridcoin payout confirmation |
 | Metadata | Planned |
 | Mainnet mint address | Not deployed |
 
@@ -286,7 +290,8 @@ anchor test --provider.cluster localnet --validator legacy
 
 The test uses a fresh local validator and the wallet in `Anchor.toml` as the
 program's upgrade authority. It covers minting, redemption, unauthorized mint
-attempts, invalid withdrawal addresses, and deposit and withdrawal replays.
+attempts, invalid withdrawal addresses, deposit and withdrawal replays,
+escrow settlement, cancellation, and rejection of a second resolution.
 
 If Anchor times out waiting for RPC, start the legacy validator separately.
 In one terminal, launch a fresh ledger and leave the validator running:
@@ -330,15 +335,17 @@ set `ANCHOR_WALLET` to the bridge admin wallet and run
 configured operator to the admin wallet until the admin changes it again.
 
 Use a development deployment with payout processing disabled. The smoke
-test mints and burns one base unit in the same transaction and verifies
-the synthetic deposit receipt, withdrawal request, and ending token balance.
+test mints, locks, and settles one base unit in the same transaction and
+verifies the synthetic deposit receipt, withdrawal record, and ending token
+balance. The payout transaction ID is synthetic. Upgrade the Devnet program
+to the escrow version before running this test.
 
 The project will include automated tests for:
 
 - Bridge initialization.
 - Authorized and unauthorized minting.
 - Duplicate deposit rejection.
-- Token burning and withdrawal creation.
+- Escrow locking, withdrawal creation, settlement burns, and cancellation refunds.
 - Invalid withdrawal parameters.
 - Emergency pause behavior.
 - Administrative authority transfers.
@@ -378,7 +385,12 @@ Planned security controls include:
 - Detailed audit logging.
 - Independent security review before production deployment.
 
-A successful burn does not automatically guarantee a Gridcoin payout. Redemption depends on the bridge's reserve custody and payout infrastructure.
+The Solana program trusts the operator's payout confirmation and cancellation
+decisions. Users depend on the operator to resolve pending requests. The relayer
+must serialize payout and cancellation decisions per request and persist a
+payout transaction before broadcasting it, so a restart can resume tracking
+the same transaction. A timeout alone cannot authorize cancellation. Once a
+payout has confirmed, the relayer must retry Solana settlement if needed.
 
 ### Reserve Accounting
 
@@ -387,10 +399,13 @@ The intended solvency invariant is:
 ```text
 Confirmed GRC reserves
     >=
-Outstanding wGRC supply
-    + Unpaid GRC redemption obligations
+Total wGRC supply
+    - wGRC escrowed for confirmed payouts awaiting Solana settlement
+    + Unpaid legacy burn-first redemption obligations
 ```
 
+Pending escrow is included in SPL supply and counts once. Track and reconcile
+confirmed payouts awaiting settlement against their specific escrow records.
 Any reserve assets committed to other obligations must be excluded from available backing.
 
 ### Gridcoin Staking
@@ -442,7 +457,7 @@ No liquidity pool or exchange listing is guaranteed.
 - [ ] Implement Anchor bridge program.
 - [ ] Create wGRC SPL mint.
 - [ ] Implement deposit receipts and replay protection.
-- [ ] Implement burn and withdrawal requests.
+- [ ] Implement escrowed withdrawals with payout settlement and cancellation.
 - [ ] Implement administration and emergency controls.
 - [ ] Add automated contract tests.
 - [ ] Deploy and test on Solana Devnet.

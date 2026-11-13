@@ -55,6 +55,7 @@ test("mints and burns a test amount on the existing Devnet bridge", async () => 
   const nonce = new BN(nonceBytes, "le");
   const depositReceipt = pda("deposit", depositId);
   const withdrawal = pda("withdrawal", operator.toBuffer(), nonceBytes);
+  const vault = pda("vault", withdrawal.toBuffer());
   const amount = new BN(1);
   const common = { bridge, mint, tokenProgram: TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId };
   const mintInstruction = await program.methods.mintDeposit([...depositId], amount).accountsStrict({
@@ -64,26 +65,32 @@ test("mints and burns a test amount on the existing Devnet bridge", async () => 
     recipientTokens: account,
     depositReceipt,
   }).instruction();
-  const burnInstruction = await program.methods.requestWithdrawal(nonce, amount, gridcoinAddress)
+  const lockInstruction = await program.methods.requestWithdrawal(nonce, amount, gridcoinAddress)
     .accountsStrict({
       ...common,
       owner: operator,
       ownerTokens: account,
       withdrawal,
+      vault,
     }).instruction();
+  const payoutTxid = [...randomBytes(32)];
+  const settleInstruction = await program.methods.settleWithdrawal(payoutTxid).accountsStrict({
+    bridge, mint, withdrawal, vault, mintOperator: operator, tokenProgram: TOKEN_PROGRAM_ID,
+  }).instruction();
 
   // Mint and burn atomically, including if the withdrawal address is rejected.
   const transaction = new Transaction().add(
     createAssociatedTokenAccountIdempotentInstruction(operator, account, operator, mint),
     mintInstruction,
-    burnInstruction,
+    lockInstruction,
+    settleInstruction,
   );
   const signature = await provider.sendAndConfirm(transaction);
   console.log(`Devnet transaction: ${signature}`);
 
   const [receipt, request, tokenAccount] = await Promise.all([
     program.account.depositReceipt.fetch(depositReceipt, "confirmed"),
-    program.account.withdrawalRequest.fetch(withdrawal, "confirmed"),
+    program.account.escrowWithdrawal.fetch(withdrawal, "confirmed"),
     getAccount(connection, account, "confirmed"),
   ]);
   assert.deepEqual(Buffer.from(receipt.depositId), depositId);
@@ -93,5 +100,6 @@ test("mints and burns a test amount on the existing Devnet bridge", async () => 
   assert.ok(request.nonce.eq(nonce));
   assert.ok(request.amount.eq(amount));
   assert.equal(request.gridcoinAddress, gridcoinAddress);
+  assert.deepEqual(request.status.settled.gridcoinTxid, payoutTxid);
   assert.equal(tokenAccount.amount, balanceBefore);
 });

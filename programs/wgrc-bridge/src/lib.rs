@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Burn, Mint, MintTo, Token, TokenAccount};
+use anchor_spl::token::{self, Burn, Mint, MintTo, Token, TokenAccount, Transfer};
 
 // Replace this development address with the deployment keypair's public key.
 declare_id!("AvqkRykFXfx31fDYnJq7kPkNpgiMA6LbknavHMvjz3Zy");
@@ -72,24 +72,79 @@ pub mod wgrc_bridge {
             .map_err(|_| error!(BridgeError::InvalidGridcoinAddress))?;
         require!(payload_len == 21, BridgeError::InvalidGridcoinAddress);
 
-        token::burn(
+        token::transfer(
             CpiContext::new(
                 ctx.accounts.token_program.key(),
-                Burn {
-                    mint: ctx.accounts.mint.to_account_info(),
+                Transfer {
                     from: ctx.accounts.owner_tokens.to_account_info(),
+                    to: ctx.accounts.vault.to_account_info(),
                     authority: ctx.accounts.owner.to_account_info(),
                 },
             ),
             amount,
         )?;
 
-        ctx.accounts.withdrawal.set_inner(WithdrawalRequest {
+        ctx.accounts.withdrawal.set_inner(EscrowWithdrawal {
             owner: ctx.accounts.owner.key(),
             nonce,
             amount,
             gridcoin_address,
+            status: WithdrawalStatus::Pending,
         });
+        Ok(())
+    }
+
+    /// The operator attests that the Gridcoin payout has reached the required confirmations.
+    pub fn settle_withdrawal(ctx: Context<ResolveWithdrawal>, gridcoin_txid: [u8; 32]) -> Result<()> {
+        require!(gridcoin_txid != [0; 32], BridgeError::InvalidPayoutTxid);
+        let withdrawal = &ctx.accounts.withdrawal;
+        let nonce = withdrawal.nonce.to_le_bytes();
+        let seeds: &[&[u8]] = &[
+            b"withdrawal",
+            withdrawal.owner.as_ref(),
+            &nonce,
+            &[ctx.bumps.withdrawal],
+        ];
+        token::burn(
+            CpiContext::new(
+                ctx.accounts.token_program.key(),
+                Burn {
+                    mint: ctx.accounts.mint.to_account_info(),
+                    from: ctx.accounts.vault.to_account_info(),
+                    authority: withdrawal.to_account_info(),
+                },
+            )
+            .with_signer(&[seeds]),
+            withdrawal.amount,
+        )?;
+        ctx.accounts.withdrawal.status = WithdrawalStatus::Settled { gridcoin_txid };
+        Ok(())
+    }
+
+    /// The operator must establish that no payout has occurred or can still settle.
+    pub fn cancel_withdrawal(ctx: Context<CancelWithdrawal>) -> Result<()> {
+        let accounts = &ctx.accounts.resolution;
+        let withdrawal = &accounts.withdrawal;
+        let nonce = withdrawal.nonce.to_le_bytes();
+        let seeds: &[&[u8]] = &[
+            b"withdrawal",
+            withdrawal.owner.as_ref(),
+            &nonce,
+            &[ctx.bumps.resolution.withdrawal],
+        ];
+        token::transfer(
+            CpiContext::new(
+                accounts.token_program.key(),
+                Transfer {
+                    from: accounts.vault.to_account_info(),
+                    to: ctx.accounts.refund_tokens.to_account_info(),
+                    authority: withdrawal.to_account_info(),
+                },
+            )
+            .with_signer(&[seeds]),
+            withdrawal.amount,
+        )?;
+        ctx.accounts.resolution.withdrawal.status = WithdrawalStatus::Cancelled;
         Ok(())
     }
 
@@ -184,20 +239,66 @@ pub struct RequestWithdrawal<'info> {
         constraint = !bridge.paused @ BridgeError::Paused
     )]
     pub bridge: Account<'info, Bridge>,
-    #[account(mut, seeds = [b"mint"], bump)]
+    #[account(seeds = [b"mint"], bump)]
     pub mint: Account<'info, Mint>,
     #[account(mut, token::mint = mint, token::authority = owner)]
     pub owner_tokens: Account<'info, TokenAccount>,
     #[account(
         init,
         payer = owner,
-        space = 8 + WithdrawalRequest::INIT_SPACE,
+        space = 8 + EscrowWithdrawal::INIT_SPACE,
         seeds = [b"withdrawal", owner.key().as_ref(), &nonce.to_le_bytes()],
         bump
     )]
-    pub withdrawal: Account<'info, WithdrawalRequest>,
+    pub withdrawal: Account<'info, EscrowWithdrawal>,
+    #[account(
+        init,
+        payer = owner,
+        seeds = [b"vault", withdrawal.key().as_ref()],
+        bump,
+        token::mint = mint,
+        token::authority = withdrawal,
+        token::token_program = token_program
+    )]
+    pub vault: Account<'info, TokenAccount>,
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct ResolveWithdrawal<'info> {
+    pub mint_operator: Signer<'info>,
+    #[account(seeds = [b"bridge"], bump, has_one = mint_operator @ BridgeError::Unauthorized)]
+    pub bridge: Account<'info, Bridge>,
+    #[account(mut, seeds = [b"mint"], bump)]
+    pub mint: Account<'info, Mint>,
+    #[account(
+        mut,
+        seeds = [b"withdrawal", withdrawal.owner.as_ref(), &withdrawal.nonce.to_le_bytes()],
+        bump,
+        constraint = withdrawal.status == WithdrawalStatus::Pending @ BridgeError::WithdrawalResolved
+    )]
+    pub withdrawal: Account<'info, EscrowWithdrawal>,
+    #[account(
+        mut,
+        seeds = [b"vault", withdrawal.key().as_ref()],
+        bump,
+        token::mint = mint,
+        token::authority = withdrawal
+    )]
+    pub vault: Account<'info, TokenAccount>,
+    pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+pub struct CancelWithdrawal<'info> {
+    pub resolution: ResolveWithdrawal<'info>,
+    #[account(
+        mut,
+        constraint = refund_tokens.mint == resolution.mint.key(),
+        constraint = refund_tokens.owner == resolution.withdrawal.owner
+    )]
+    pub refund_tokens: Account<'info, TokenAccount>,
 }
 
 #[derive(Accounts)]
@@ -233,12 +334,31 @@ pub struct DepositReceipt {
 
 #[account]
 #[derive(InitSpace)]
+/// Legacy record for withdrawals that already burned tokens before the escrow upgrade.
 pub struct WithdrawalRequest {
     pub owner: Pubkey,
     pub nonce: u64,
     pub amount: u64,
     #[max_len(MAX_GRIDCOIN_ADDRESS_LEN)]
     pub gridcoin_address: String,
+}
+
+#[account]
+#[derive(InitSpace)]
+pub struct EscrowWithdrawal {
+    pub owner: Pubkey,
+    pub nonce: u64,
+    pub amount: u64,
+    #[max_len(MAX_GRIDCOIN_ADDRESS_LEN)]
+    pub gridcoin_address: String,
+    pub status: WithdrawalStatus,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, InitSpace, PartialEq, Eq)]
+pub enum WithdrawalStatus {
+    Pending,
+    Settled { gridcoin_txid: [u8; 32] },
+    Cancelled,
 }
 
 #[error_code]
@@ -253,4 +373,8 @@ pub enum BridgeError {
     InvalidGridcoinAddress,
     #[msg("The authority cannot be the default public key.")]
     InvalidAuthority,
+    #[msg("The withdrawal has already been settled or cancelled.")]
+    WithdrawalResolved,
+    #[msg("A Gridcoin payout transaction ID is required.")]
+    InvalidPayoutTxid,
 }

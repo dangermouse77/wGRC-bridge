@@ -15,7 +15,7 @@ const UPGRADEABLE_LOADER = new PublicKey("BPFLoaderUpgradeab1e111111111111111111
 // A Base58Check fixture. Gridcoin network validation happens outside the program.
 const WITHDRAWAL_ADDRESS = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT";
 
-test("mints and redeems wGRC once per deposit ID and withdrawal nonce", async () => {
+test("mints wGRC once per deposit ID, locks and settles withdrawals, and refunds through cancel_withdrawal", async () => {
   const { hostname } = new URL(process.env.ANCHOR_PROVIDER_URL ?? "http://invalid");
   assert.ok(
     ["127.0.0.1", "localhost", "[::1]"].includes(hostname),

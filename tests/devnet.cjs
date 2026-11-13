@@ -11,7 +11,7 @@ const {
 const { SystemProgram, PublicKey, Transaction } = require("@solana/web3.js");
 const idl = require("../target/idl/wgrc_bridge.json");
 
-test("mints and burns a test amount on the existing Devnet bridge", async () => {
+test("mints wGRC, locks it in escrow, and burns it on Devnet settlement", async () => {
   assert.equal(
     process.env.ANCHOR_PROVIDER_URL,
     "https://api.devnet.solana.com",

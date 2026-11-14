@@ -5,6 +5,17 @@
     "test": "node --test tests/bridge.cjs",
     "test:devnet": "node --test tests/devnet.cjs"
   },
+  "overrides": {
+    "@metaplex-foundation/umi-downloader-http": "1.2.0",
+    "@metaplex-foundation/umi-eddsa-web3js": "1.0.1",
+    "@metaplex-foundation/umi-http-fetch": "1.2.0",
+    "@metaplex-foundation/umi-program-repository": "1.2.0",
+    "@metaplex-foundation/umi-rpc-chunk-get-accounts": "1.2.0",
+    "@metaplex-foundation/umi-rpc-web3js": "1.2.0",
+    "@metaplex-foundation/umi-serializer-data-view": "1.2.0",
+    "@metaplex-foundation/umi-transaction-factory-web3js": "1.2.0",
+    "@metaplex-foundation/umi-web3js-adapters": "1.2.0"
+  },
   "devDependencies": {
     "@anchor-lang/core": "1.2.2",
     "@metaplex-foundation/mpl-token-metadata": "3.4.0",

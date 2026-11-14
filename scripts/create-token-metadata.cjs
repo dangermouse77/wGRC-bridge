@@ -1,9 +1,12 @@
 const { AnchorProvider, Program } = require("@anchor-lang/core");
-const { readFileSync } = require("node:fs");
-const { fetchMetadata, mplTokenMetadata, updateV1 } = require("@metaplex-foundation/mpl-token-metadata");
-const { keypairIdentity, publicKey, some } = require("@metaplex-foundation/umi");
-const { createUmi } = require("@metaplex-foundation/umi-bundle-defaults");
-const { PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY } = require("@solana/web3.js");
+const {
+  getMetadataAccountDataSerializer,
+  getUpdateMetadataAccountV2InstructionDataSerializer,
+} = require("@metaplex-foundation/mpl-token-metadata");
+const { some } = require("@metaplex-foundation/umi");
+const {
+  PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY, Transaction, TransactionInstruction,
+} = require("@solana/web3.js");
 const idl = require("../target/idl/wgrc_bridge.json");
 
 async function main() {
@@ -29,11 +32,13 @@ async function main() {
     metadataProgram,
   );
   console.log(`Metadata account: ${metadata}`);
-  if (await provider.connection.getAccountInfo(metadata, "confirmed")) {
-    const umi = createUmi(provider.connection.rpcEndpoint).use(mplTokenMetadata());
-    const current = await fetchMetadata(umi, publicKey(metadata.toBase58()), {
-      commitment: "confirmed",
-    });
+  const account = await provider.connection.getAccountInfo(metadata, "confirmed");
+  if (account) {
+    if (!account.owner.equals(metadataProgram)) {
+      throw new Error("The metadata account is not owned by Metaplex.");
+    }
+    const serializer = getMetadataAccountDataSerializer();
+    const [current] = serializer.deserialize(account.data);
     console.log(`Current URI: ${current.uri}\nUpdate authority: ${current.updateAuthority}`);
     if (current.uri === uri) {
       console.log("The metadata already points to this URL.");
@@ -42,24 +47,31 @@ async function main() {
     if (!current.isMutable || current.updateAuthority !== provider.wallet.publicKey.toBase58()) {
       throw new Error("Updating the URI requires mutable metadata and its update authority wallet.");
     }
-    const secretKey = Uint8Array.from(JSON.parse(readFileSync(process.env.ANCHOR_WALLET, "utf8")));
-    umi.use(keypairIdentity(umi.eddsa.createKeypairFromSecretKey(secretKey)));
-    await updateV1(umi, {
-      mint: publicKey(mint.toBase58()),
-      authority: umi.identity,
+    const data = getUpdateMetadataAccountV2InstructionDataSerializer().serialize({
       data: some({
         name: current.name,
         symbol: current.symbol,
         uri,
         sellerFeeBasisPoints: current.sellerFeeBasisPoints,
         creators: current.creators,
+        collection: current.collection,
+        uses: current.uses,
       }),
-    }).sendAndConfirm(umi, { confirm: { commitment: "confirmed" } });
-    const updated = await fetchMetadata(umi, publicKey(metadata.toBase58()), {
-      commitment: "confirmed",
     });
+    const instruction = new TransactionInstruction({
+      programId: metadataProgram,
+      keys: [
+        { pubkey: metadata, isSigner: false, isWritable: true },
+        { pubkey: provider.wallet.publicKey, isSigner: true, isWritable: false },
+      ],
+      data: Buffer.from(data),
+    });
+    const signature = await provider.sendAndConfirm(new Transaction().add(instruction));
+    const updatedAccount = await provider.connection.getAccountInfo(metadata, "confirmed");
+    if (!updatedAccount) throw new Error("Metadata account could not be read after the update.");
+    const [updated] = serializer.deserialize(updatedAccount.data);
     if (updated.uri !== uri) throw new Error(`Unexpected URI after update: ${updated.uri}`);
-    console.log(`Updated URI: ${updated.uri}`);
+    console.log(`Updated URI: ${updated.uri}\nDevnet transaction: ${signature}`);
     return;
   }
   const signature = await program.methods.createTokenMetadata(uri).accountsStrict({

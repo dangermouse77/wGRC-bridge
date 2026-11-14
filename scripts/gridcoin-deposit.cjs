@@ -63,13 +63,13 @@ async function main() {
   const { GRC_RPC_USER, GRC_RPC_PASSWORD, GRC_RPC_URL = "http://127.0.0.1:25715" } = process.env;
   if (!GRC_RPC_USER || !GRC_RPC_PASSWORD) throw new Error("Set GRC_RPC_USER and GRC_RPC_PASSWORD.");
   const endpoint = new URL(GRC_RPC_URL);
-  if (!["127.0.0.1", "localhost", "[::1]"].includes(endpoint.hostname)
-      || !["http:", "https:"].includes(endpoint.protocol)) {
-    throw new Error("Run against a local Gridcoin RPC endpoint.");
+  if (!["http:", "https:"].includes(endpoint.protocol) || endpoint.username || endpoint.password) {
+    throw new Error("Set GRC_RPC_URL to an HTTP(S) endpoint and supply credentials separately.");
   }
   async function rpc(method, ...params) {
     const response = await fetch(endpoint, {
       method: "POST",
+      redirect: "error",
       headers: {
         Authorization: `Basic ${Buffer.from(`${GRC_RPC_USER}:${GRC_RPC_PASSWORD}`).toString("base64")}`,
         "Content-Type": "application/json",

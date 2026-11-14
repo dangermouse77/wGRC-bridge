@@ -38,10 +38,22 @@ for operator reconciliation.
 
 ## Testnet verification
 
-Run from the repository root on the Gridcoin Testnet VM with Node.js 22 or
-newer, project npm dependencies installed, and a synced Gridcoin Core node.
+Run from the repository root with Node.js 22 or newer, project npm
+dependencies installed, and RPC access to a synced Gridcoin Core node.
 The tool targets the Testnet genesis and defaults to RPC on localhost port
 25715. Use a funded sender wallet and a distinct Testnet reserve address.
+
+For a Gridcoin node on another VM, set `GRC_RPC_URL` to its reachable RPC
+endpoint, for example `http://gridcoin-vm:25715`. Plain HTTP sends the RPC
+credentials without encryption. To keep RPC bound to localhost on the
+Gridcoin VM and encrypt traffic between the VMs, open an SSH tunnel:
+
+```bash
+ssh -N -L 127.0.0.1:25716:127.0.0.1:25715 user@gridcoin-vm
+```
+
+Leave that terminal open and set
+`GRC_RPC_URL=http://127.0.0.1:25716` in the shell running the script.
 
 ```bash
 export GRC_RPC_USER='<RPC username>'

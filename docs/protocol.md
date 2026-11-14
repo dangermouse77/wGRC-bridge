@@ -1,0 +1,70 @@
+# Gridcoin deposit protocol v1
+
+A deposit is an ordinary Gridcoin transaction with exactly one positive output
+paying the configured reserve script and exactly one zero-value `OP_RETURN`
+output. The reserve uses a P2PKH or P2SH address. Other outputs may carry change.
+Coinbase and coinstake transactions are excluded. Match the reserve's full
+script bytes so the amount and output index refer to the actual payment.
+
+The carrier script is exactly `6a25 || 5747524301 || recipient`. Here `6a` is
+`OP_RETURN`, `25` is the minimal push opcode for 37 bytes, and `recipient` is
+the 32-byte Solana public key. Reject extra data, nonminimal pushes, unsupported
+versions, and ambiguous outputs. Amounts use eight decimal places and are
+converted to integer base units without rounding.
+
+## Deposit identifier
+
+Compute SHA-256 over the following concatenation:
+
+```text
+ASCII("WGRC-DEPOSIT-V1") || 00 || genesis_hash || txid || vout_u32_le
+```
+
+Use the 32 bytes obtained by decoding each hash from Gridcoin RPC display hex,
+in that order. Encode the reserve payment's zero-based output index as four
+little-endian bytes. Pass the 32-byte digest to Solana as `deposit_id`. The
+Gridcoin genesis hash separates networks. The relayer must also bind each
+Gridcoin network and reserve to its configured Solana deployment.
+
+## Confirmation and recovery
+
+Use the active-chain confirmation count returned by Gridcoin Core. Require a
+configured positive threshold and recheck the deposit immediately before
+submitting a mint. Persist the deposit block hash, output index, amount,
+recipient, and ID so retries reuse the same receipt PDA. If a reorganization
+removes a deposit before minting, wait for it to qualify again. If it removes
+a deposit after minting, flag a backing discrepancy and halt affected minting
+for operator reconciliation.
+
+## Testnet verification
+
+Run from the repository root on the Gridcoin Testnet VM with Node.js 22 or
+newer, project npm dependencies installed, and a synced Gridcoin Core node.
+The tool targets the Testnet genesis and defaults to RPC on localhost port
+25715. Use a funded sender wallet and a distinct Testnet reserve address.
+
+```bash
+export GRC_RPC_USER='<RPC username>'
+read -rsp 'Gridcoin RPC password: ' GRC_RPC_PASSWORD
+export GRC_RPC_PASSWORD
+echo
+reserve='<Gridcoin Testnet reserve address>'
+recipient='<Solana Devnet recipient public key>'
+node scripts/gridcoin-deposit.cjs create "$reserve" 1.00000000 "$recipient"
+```
+
+`create` signs and prints the transaction, including its ID and hex. To
+broadcast that exact transaction, use `gridcoinresearchd -testnet
+sendrawtransaction '<signedHex>'` with your usual local RPC configuration.
+Alternatively, use the script's `send` command in place of `create` to build
+and broadcast a new deposit. Choose one broadcast path per deposit.
+
+After the transaction reaches the desired depth, inspect it using the
+validator. Six confirmations below is an example Testnet threshold.
+
+```bash
+node scripts/gridcoin-deposit.cjs check "$reserve" '<txid>' 6
+```
+
+This prints the recipient, exact amount in base units, deposit ID, and active
+block information. There is no Solana mint in this verification workflow.

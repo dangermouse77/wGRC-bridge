@@ -155,7 +155,9 @@ Hexadecimal prefix:
 
 The relayer must validate the transaction, its destination, its amount, and the payload before authorizing minting.
 
-The final protocol specification will define deposit identifiers, network separation, confirmation requirements, malformed payload handling, and supported transaction structures.
+The [v1 deposit specification](docs/protocol.md) defines the transaction
+format, network-separated deposit ID, confirmation rules, and commands to
+create and validate a deposit on Gridcoin Testnet.
 
 Gridcoin `OP_RETURN` support and transaction construction must be verified against the target Gridcoin Core version and network before production use.
 
@@ -485,10 +487,10 @@ No liquidity pool or exchange listing is guaranteed.
 ### Phase 2 — Gridcoin Deposit Protocol
 
 - [ ] Verify `OP_RETURN` support.
-- [ ] Define the final deposit payload specification.
-- [ ] Implement deposit transaction creation.
+- [x] Define the v1 deposit payload specification.
+- [x] Implement deposit transaction creation.
 - [ ] Test deposits on Gridcoin Testnet.
-- [ ] Implement transaction and confirmation validation.
+- [x] Implement transaction and confirmation validation.
 
 ### Phase 3 — Relayer and PostgreSQL
 

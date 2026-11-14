@@ -1,4 +1,7 @@
 use anchor_lang::prelude::*;
+use anchor_spl::metadata::{
+    self, mpl_token_metadata::types::DataV2, CreateMetadataAccountsV3, Metadata,
+};
 use anchor_spl::token::{self, Burn, Mint, MintTo, Token, TokenAccount, Transfer};
 
 // Replace this development address with the deployment keypair's public key.
@@ -146,6 +149,42 @@ pub mod wgrc_bridge {
         )?;
         ctx.accounts.resolution.withdrawal.status = WithdrawalStatus::Cancelled;
         Ok(())
+    }
+
+    pub fn create_token_metadata(ctx: Context<CreateTokenMetadata>, uri: String) -> Result<()> {
+        require!(
+            uri.starts_with("https://") && uri.len() > 8 && uri.len() <= 200,
+            BridgeError::InvalidMetadataUri
+        );
+        let accounts = &ctx.accounts;
+        let mint_seeds: &[&[u8]] = &[b"mint", &[ctx.bumps.mint]];
+        metadata::create_metadata_accounts_v3(
+            CpiContext::new(
+                accounts.metadata_program.key(),
+                CreateMetadataAccountsV3 {
+                    metadata: accounts.metadata.to_account_info(),
+                    mint: accounts.mint.to_account_info(),
+                    mint_authority: accounts.mint.to_account_info(),
+                    payer: accounts.admin.to_account_info(),
+                    update_authority: accounts.admin.to_account_info(),
+                    system_program: accounts.system_program.to_account_info(),
+                    rent: accounts.rent.to_account_info(),
+                },
+            )
+            .with_signer(&[mint_seeds]),
+            DataV2 {
+                name: "Wrapped Gridcoin".into(),
+                symbol: "wGRC".into(),
+                uri,
+                seller_fee_basis_points: 0,
+                creators: None,
+                collection: None,
+                uses: None,
+            },
+            true,
+            true,
+            None,
+        )
     }
 
     pub fn set_paused(ctx: Context<Administer>, paused: bool) -> Result<()> {
@@ -302,6 +341,27 @@ pub struct CancelWithdrawal<'info> {
 }
 
 #[derive(Accounts)]
+pub struct CreateTokenMetadata<'info> {
+    #[account(mut)]
+    pub admin: Signer<'info>,
+    #[account(seeds = [b"bridge"], bump, has_one = admin @ BridgeError::Unauthorized)]
+    pub bridge: Account<'info, Bridge>,
+    #[account(seeds = [b"mint"], bump)]
+    pub mint: Account<'info, Mint>,
+    /// CHECK: The seeds validate the canonical Metaplex account for this mint.
+    #[account(
+        mut,
+        seeds = [b"metadata", metadata_program.key().as_ref(), mint.key().as_ref()],
+        bump,
+        seeds::program = metadata_program.key()
+    )]
+    pub metadata: UncheckedAccount<'info>,
+    pub metadata_program: Program<'info, Metadata>,
+    pub system_program: Program<'info, System>,
+    pub rent: Sysvar<'info, Rent>,
+}
+
+#[derive(Accounts)]
 pub struct Administer<'info> {
     pub admin: Signer<'info>,
     #[account(mut, seeds = [b"bridge"], bump, has_one = admin @ BridgeError::Unauthorized)]
@@ -377,4 +437,6 @@ pub enum BridgeError {
     WithdrawalResolved,
     #[msg("A Gridcoin payout transaction ID is required.")]
     InvalidPayoutTxid,
+    #[msg("The metadata URI must be an HTTPS URL of at most 200 bytes.")]
+    InvalidMetadataUri,
 }

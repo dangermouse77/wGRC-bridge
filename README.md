@@ -172,10 +172,30 @@ Gridcoin `OP_RETURN` support and transaction construction must be verified again
 | Target backing ratio | 1:1 |
 | Mint authority | Bridge program PDA |
 | Burn mechanism | Operator settles an escrowed withdrawal after Gridcoin payout confirmation |
-| Metadata | Planned |
+| Metadata | Metaplex metadata with a hosted JSON file and violet Gridcoin logo |
 | Mainnet mint address | Not deployed |
 
 The final token precision must be compatible with the Gridcoin network's native amount representation. Conversions must be exact and must never introduce unbacked units.
+
+### Publish the Devnet token icon
+
+Host `metadata/wgrc.json` at a public HTTPS URL. The JSON references the
+official violet Gridcoin logo. If a wallet requires a raster image, use a
+public PNG URL for its `image` field.
+
+Build and deploy the upgrade with the Devnet program upgrade authority. Then
+create the metadata account once using the bridge admin wallet:
+
+```bash
+anchor build
+anchor deploy --provider.cluster devnet
+export ANCHOR_PROVIDER_URL=https://api.devnet.solana.com
+export ANCHOR_WALLET="$HOME/.config/solana/devnet.json"
+node scripts/create-token-metadata.cjs '<public HTTPS URL of wgrc.json>'
+```
+
+The admin wallet becomes the Metaplex update authority. If bridge
+administration changes, transfer metadata authority separately.
 
 ## Network Environments
 

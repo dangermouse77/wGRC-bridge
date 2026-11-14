@@ -2,5 +2,5 @@
   "name": "Wrapped Gridcoin",
   "symbol": "wGRC",
   "description": "Wrapped Gridcoin on Solana.",
-  "image": "https://gridcoin.us/assets/img/wiki/tx_por.svg"
+  "image": "https://raw.githubusercontent.com/dangermouse77/wGRC-bridge/refs/heads/main/metadata/wgrc.svg"
 }

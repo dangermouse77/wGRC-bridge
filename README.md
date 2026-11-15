@@ -159,7 +159,9 @@ The [v1 deposit specification](docs/protocol.md) defines the transaction
 format, network-separated deposit ID, confirmation rules, and commands to
 create and validate a deposit on Gridcoin Testnet.
 
-Gridcoin `OP_RETURN` support and transaction construction must be verified against the target Gridcoin Core version and network before production use.
+Deposit construction and `OP_RETURN` relay were verified on Gridcoin Testnet.
+Production deployment still requires verification against the target Gridcoin
+Core version and network.
 
 ## Token Specification
 
@@ -502,17 +504,19 @@ ID. The read-only `npm run supply` command reports mint, burn, and escrow totals
 
 ### Phase 2 — Gridcoin Deposit Protocol
 
-- [ ] Verify `OP_RETURN` support.
+- [x] Verify `OP_RETURN` support on Gridcoin Testnet.
 - [x] Define the v1 deposit payload specification.
 - [x] Implement deposit transaction creation.
-- [ ] Test deposits on Gridcoin Testnet.
+- [x] Test deposits on Gridcoin Testnet.
 - [x] Implement transaction and confirmation validation.
 
-Gridcoin Testnet RPC has successfully constructed and signed a deposit with
-the 37-byte payload and a one-base-unit `OP_RETURN` carrier. The original
-zero-value carrier was rejected. The remaining check is to broadcast the
-corrected transaction, wait for active-chain confirmations, and verify it
-with the deposit script's `check` command.
+The deposit script constructed, signed, broadcast, and validated a 1 GRC
+deposit on Gridcoin Testnet. Transaction
+`448bd13d7db71908372e30bb40f98134506810637339161bbbf34415499bf76e`
+carried the 37-byte payload in a one-base-unit `OP_RETURN` output and passed
+the `check` command at 10 active-chain confirmations. The verification
+covered the Gridcoin side of the bridge. Automatic Solana minting is part
+of Phase 3.
 
 ### Phase 3 — Relayer and PostgreSQL
 

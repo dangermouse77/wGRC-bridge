@@ -76,9 +76,19 @@ async function main() {
       },
       body: JSON.stringify({ jsonrpc: "1.0", id: "wgrc", method, params }),
       signal: AbortSignal.timeout(30_000),
+    }).catch((error) => {
+      const reason = error.cause?.code ?? error.name;
+      throw new Error(`${method}: cannot reach Gridcoin RPC at ${endpoint.origin} (${reason})`);
     });
-    const reply = JSON.parse(await response.text(), (key, entry, context) =>
-      key === "value" && typeof entry === "number" ? context.source : entry);
+    const body = await response.text();
+    let reply;
+    try {
+      reply = JSON.parse(body, (key, entry, context) =>
+        key === "value" && typeof entry === "number" ? context.source : entry);
+    } catch (error) {
+      if (!(error instanceof SyntaxError)) throw error;
+      throw new Error(`${method}: Gridcoin RPC at ${endpoint.origin} returned HTTP ${response.status} without a JSON response.`);
+    }
     if (!response.ok || reply.error) {
       throw new Error(`${method}: ${reply.error?.message ?? `HTTP ${response.status}`}`);
     }

@@ -1,11 +1,9 @@
 #!/bin/bash
 if [[ -z ${GRC_RPC_PASSWORD:-} ]]; then
-  cat >&2 <<'EOF'
-Set GRC_RPC_PASSWORD in your current shell, then rerun this script:
+
   read -rsp 'Gridcoin RPC password: ' GRC_RPC_PASSWORD; echo
   export GRC_RPC_PASSWORD
-EOF
-  exit 1
+
 fi
 
 export GRC_RPC_USER=dangermouse

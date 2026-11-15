@@ -78,7 +78,8 @@ function confirmedDeposit(tx, reserveScript, minimum) {
   const result = deposit(tx, reserveScript);
   if (!/^[a-f0-9]{64}$/.test(tx.blockhash ?? "") || !Number.isSafeInteger(tx.confirmations)
       || tx.confirmations < minimum) {
-    throw new Error(`Deposit requires ${minimum} active-chain confirmations.`);
+    const current = Number.isSafeInteger(tx.confirmations) ? Math.max(0, tx.confirmations) : 0;
+    throw new Error(`Deposit has ${current} active-chain confirmations. Required: ${minimum}.`);
   }
   return { ...result, blockhash: tx.blockhash, confirmations: tx.confirmations };
 }

@@ -62,14 +62,22 @@ export GRC_RPC_PASSWORD
 echo
 reserve='<Gridcoin Testnet reserve address>'
 recipient='<Solana Devnet recipient public key>'
-node scripts/gridcoin-deposit.cjs create "$reserve" 1.00000000 "$recipient"
+node scripts/gridcoin-deposit.cjs create "$reserve" 1.00000000 "$recipient" > deposit.json
 ```
 
-`create` signs and prints the transaction, including its ID and hex. To
-broadcast that exact transaction, use `gridcoinresearchd -testnet
-sendrawtransaction '<signedHex>'` with your usual local RPC configuration.
-Alternatively, use the script's `send` command in place of `create` to build
-and broadcast a new deposit. Choose one broadcast path per deposit.
+`create` signs the transaction, and the example saves its JSON output. If
+you already ran `create`, save the JSON from that run to `deposit.json`.
+Inspect the reserve, amount and recipient before broadcasting. The
+`broadcast` command decodes the saved transaction, validates the reserve
+output and payload, and checks that the decoded fields match the JSON.
+
+```bash
+node scripts/gridcoin-deposit.cjs broadcast "$reserve" deposit.json
+```
+
+If the RPC connection drops after submission, check the transaction by its
+original ID before attempting another deposit. The `send` command builds a
+new transaction and is intended for a new deposit.
 
 After the transaction reaches the desired depth, inspect it using the
 validator. Six confirmations below is an example Testnet threshold.

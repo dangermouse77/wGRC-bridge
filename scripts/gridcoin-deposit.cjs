@@ -1,4 +1,5 @@
 const { createHash } = require("node:crypto");
+const { readFileSync } = require("node:fs");
 const { PublicKey } = require("@solana/web3.js");
 
 const TESTNET_GENESIS = "00006e037d7b84104208ecf2a8638d23149d712ea810da604ee2f2cb39bae713";
@@ -55,10 +56,17 @@ function confirmedDeposit(tx, reserveScript, minimum) {
 
 async function main() {
   const [command, reserveAddress, value, extra, ...rest] = process.argv.slice(2);
-  if (!reserveAddress || !value || !extra || rest.length
-      || !["create", "send", "check"].includes(command)) {
+  const broadcast = command === "broadcast";
+  if (!reserveAddress || !value || (broadcast ? extra !== undefined : !extra) || rest.length
+      || !["create", "send", "broadcast", "check"].includes(command)) {
     throw new Error("Usage: gridcoin-deposit.cjs create|send RESERVE GRC SOLANA_RECIPIENT\n"
+      + "       gridcoin-deposit.cjs broadcast RESERVE DEPOSIT_JSON_FILE\n"
       + "       gridcoin-deposit.cjs check RESERVE TXID MIN_CONFIRMATIONS");
+  }
+  const prepared = broadcast ? JSON.parse(readFileSync(value, "utf8")) : null;
+  if (broadcast && (typeof prepared?.signedHex !== "string"
+      || !/^(?:[0-9a-fA-F]{2})+$/.test(prepared.signedHex))) {
+    throw new Error("Expected a deposit JSON file containing signedHex from create.");
   }
   const { GRC_RPC_USER, GRC_RPC_PASSWORD, GRC_RPC_URL = "http://127.0.0.1:25715" } = process.env;
   if (!GRC_RPC_USER || !GRC_RPC_PASSWORD) throw new Error("Set GRC_RPC_USER and GRC_RPC_PASSWORD.");
@@ -108,6 +116,24 @@ async function main() {
     throw new Error("Expected a Testnet P2PKH or P2SH reserve script.");
   }
 
+  async function broadcastDeposit(record, signedHex) {
+    console.error(`Broadcasting Gridcoin Testnet transaction ${record.txid}`);
+    const acknowledgedTxid = await rpc("sendrawtransaction", signedHex);
+    if (acknowledgedTxid !== record.txid) {
+      throw new Error(`Unexpected RPC result after broadcast. Look up ${record.txid} before retrying.`);
+    }
+  }
+
+  if (broadcast) {
+    const record = deposit(await rpc("decoderawtransaction", prepared.signedHex), script);
+    if (Object.entries(record).some(([field, actual]) => prepared[field] !== actual)) {
+      throw new Error("The signed transaction does not match the deposit JSON.");
+    }
+    await broadcastDeposit(record, prepared.signedHex);
+    console.log(JSON.stringify(record, null, 2));
+    return;
+  }
+
   if (command === "check") {
     const minimum = Number(extra);
     if (!/^[a-fA-F0-9]{64}$/.test(value) || !/^\d+$/.test(extra)
@@ -133,8 +159,7 @@ async function main() {
     throw new Error("The signed transaction differs from the requested deposit.");
   }
   if (command === "send") {
-    console.error(`Broadcasting Gridcoin Testnet transaction ${record.txid}`);
-    await rpc("sendrawtransaction", signedHex);
+    await broadcastDeposit(record, signedHex);
   }
   console.log(JSON.stringify({ ...record, signedHex }, null, 2));
 }

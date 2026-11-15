@@ -4,6 +4,7 @@ const { PublicKey } = require("@solana/web3.js");
 
 const TESTNET_GENESIS = "00006e037d7b84104208ecf2a8638d23149d712ea810da604ee2f2cb39bae713";
 const MAX_AMOUNT = (1n << 64n) - 1n;
+const CARRIER_AMOUNT = 1n;
 
 function baseUnits(value) {
   const match = /^(\d+)(?:\.(\d{1,8}))?$/.exec(value);
@@ -28,7 +29,10 @@ function deposit(tx, reserveScript, genesis = TESTNET_GENESIS) {
   const [carrier] = carriers;
   const amount = baseUnits(payment.value);
   const payload = /^6a255747524301([a-f0-9]{64})$/.exec(carrier.scriptPubKey.hex);
-  if (!payload || baseUnits(carrier.value) !== 0n || amount === 0n
+  if (baseUnits(carrier.value) === 0n) {
+    throw new Error("This deposit has a zero-value OP_RETURN carrier. Recreate it with the updated create command.");
+  }
+  if (!payload || baseUnits(carrier.value) !== CARRIER_AMOUNT || amount === 0n
       || !Number.isInteger(payment.n) || payment.n < 0 || payment.n > 0xffffffff) {
     throw new Error("Invalid v1 deposit payload or reserve payment.");
   }
@@ -43,6 +47,31 @@ function deposit(tx, reserveScript, genesis = TESTNET_GENESIS) {
     recipient: new PublicKey(Buffer.from(payload[1], "hex")).toBase58(),
     amountBaseUnits: amount.toString(),
   };
+}
+
+function fundCarrier(raw, outputs, payload) {
+  const bytes = Buffer.from(raw, "hex");
+  const carrierScript = `6a25${payload}`;
+  if (bytes.length < 10 || bytes[8] !== 0 || bytes[9] !== 2 || outputs.length !== 2) {
+    throw new Error("Unexpected Gridcoin unsigned deposit template.");
+  }
+  let offset = 10;
+  let patched = false;
+  for (const output of outputs) {
+    const script = Buffer.from(output.scriptPubKey.hex, "hex");
+    const scriptStart = offset + 9;
+    if (script.length >= 253 || bytes[offset + 8] !== script.length
+        || !bytes.subarray(scriptStart, scriptStart + script.length).equals(script)) {
+      throw new Error("Unexpected Gridcoin output encoding.");
+    }
+    if (output.scriptPubKey.hex === carrierScript && bytes.readBigUInt64LE(offset) === 0n) {
+      bytes.writeBigUInt64LE(CARRIER_AMOUNT, offset);
+      patched = true;
+    }
+    offset = scriptStart + script.length;
+  }
+  if (!patched) throw new Error("Gridcoin did not create the expected OP_RETURN output.");
+  return bytes.toString("hex");
 }
 
 function confirmedDeposit(tx, reserveScript, minimum) {
@@ -151,7 +180,10 @@ async function main() {
   const recipient = new PublicKey(extra);
   const payload = "5747524301" + recipient.toBuffer().toString("hex");
   const raw = await rpc("createrawtransaction", [], { [address.address]: value, data: payload });
-  const { hex } = await rpc("fundrawtransaction", raw);
+  // Gridcoin serializes version and timestamp before the CompactSize input
+  // count. Its data RPC creates a zero-valued carrier that relay policy rejects.
+  const unsigned = await rpc("decoderawtransaction", raw);
+  const { hex } = await rpc("fundrawtransaction", fundCarrier(raw, unsigned.vout, payload));
   const { hex: signedHex, complete } = await rpc("signrawtransaction", hex);
   if (!complete) throw new Error("Gridcoin wallet could not fully sign the transaction.");
   const record = deposit(await rpc("decoderawtransaction", signedHex), script);
@@ -164,7 +196,7 @@ async function main() {
   console.log(JSON.stringify({ ...record, signedHex }, null, 2));
 }
 
-module.exports = { baseUnits, deposit, confirmedDeposit };
+module.exports = { baseUnits, deposit, confirmedDeposit, fundCarrier };
 if (require.main === module) {
   main().catch((error) => {
     console.error(error.message);

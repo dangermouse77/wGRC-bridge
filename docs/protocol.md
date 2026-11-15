@@ -1,8 +1,11 @@
 # Gridcoin deposit protocol v1
 
 A deposit is an ordinary Gridcoin transaction with exactly one positive output
-paying the configured reserve script and exactly one zero-value `OP_RETURN`
-output. The reserve uses a P2PKH or P2SH address. Other outputs may carry change.
+paying the configured reserve script and exactly one `OP_RETURN` output
+carrying one base unit (0.00000001 GRC). Gridcoin Core 5.5.2.0's relay policy
+rejects zero-value outputs. The carrier amount is unspendable and excluded
+from the amount credited to the deposit. The reserve uses a P2PKH or P2SH
+address. Other outputs may carry change.
 Coinbase and coinstake transactions are excluded. Match the reserve's full
 script bytes so the amount and output index refer to the actual payment.
 

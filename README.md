@@ -488,13 +488,17 @@ No liquidity pool or exchange listing is guaranteed.
 
 ### Phase 1 — Solana Smart Contract
 
-- [ ] Implement Anchor bridge program.
-- [ ] Create wGRC SPL mint.
-- [ ] Implement deposit receipts and replay protection.
-- [ ] Implement escrowed withdrawals with payout settlement and cancellation.
-- [ ] Implement administration and emergency controls.
-- [ ] Add automated contract tests.
-- [ ] Deploy and test on Solana Devnet.
+- [x] Implement Anchor bridge program.
+- [x] Create wGRC SPL mint.
+- [x] Implement deposit receipts and replay protection.
+- [x] Implement escrowed withdrawals with payout settlement and cancellation.
+- [x] Implement administration and emergency controls.
+- [x] Add automated contract tests.
+- [x] Deploy and test on Solana Devnet.
+
+The localnet suite passed, including escrow cancellation and replay
+protection. The Devnet smoke test passed with a synthetic payout transaction
+ID. The read-only `npm run supply` command reports mint, burn, and escrow totals.
 
 ### Phase 2 — Gridcoin Deposit Protocol
 
@@ -503,6 +507,12 @@ No liquidity pool or exchange listing is guaranteed.
 - [x] Implement deposit transaction creation.
 - [ ] Test deposits on Gridcoin Testnet.
 - [x] Implement transaction and confirmation validation.
+
+Gridcoin Testnet RPC has successfully constructed and signed a deposit with
+the 37-byte payload and a one-base-unit `OP_RETURN` carrier. The original
+zero-value carrier was rejected. The remaining check is to broadcast the
+corrected transaction, wait for active-chain confirmations, and verify it
+with the deposit script's `check` command.
 
 ### Phase 3 — Relayer and PostgreSQL
 
@@ -534,7 +544,8 @@ No liquidity pool or exchange listing is guaranteed.
 
 ### Phase 6 — Ecosystem Integration
 
-- [ ] Publish token metadata.
+- [x] Publish token metadata on Solana Devnet.
+- [ ] Publish production token metadata after the mainnet mint is deployed.
 - [ ] Improve wallet recognition.
 - [ ] Explore Raydium liquidity integration.
 - [ ] Expand community participation.

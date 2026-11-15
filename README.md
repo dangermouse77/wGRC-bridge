@@ -179,6 +179,18 @@ Gridcoin `OP_RETURN` support and transaction construction must be verified again
 
 The final token precision must be compatible with the Gridcoin network's native amount representation. Conversions must be exact and must never introduce unbacked units.
 
+### Read the Devnet supply
+
+From the repository root, run `npm install`, `anchor build` to generate the
+IDL, and then `npm run supply`. The command defaults to Devnet and accepts
+an RPC override through `ANCHOR_PROVIDER_URL`. It needs no wallet.
+
+The report sums deposit receipts for total minted and pending requests for
+locked wGRC. It subtracts the SPL mint supply from total minted to count
+burns, including direct SPL burns. Circulating supply (minted minus burned)
+includes escrowed wGRC. The report also shows supply outside pending
+escrow. The escrow figure counts the requested amounts.
+
 ### Publish the Devnet token icon
 
 Host `metadata/wgrc.json` at a public HTTPS URL. The JSON references the

@@ -127,7 +127,9 @@ async function main() {
       throw new Error(`${method}: Gridcoin RPC at ${endpoint.origin} returned HTTP ${response.status} without a JSON response.`);
     }
     if (!response.ok || reply.error) {
-      throw new Error(`${method}: ${reply.error?.message ?? `HTTP ${response.status}`}`);
+      const error = new Error(`${method}: ${reply.error?.message ?? `HTTP ${response.status}`}`);
+      error.rpcCode = reply.error?.code;
+      throw error;
     }
     return reply.result;
   }
@@ -169,7 +171,14 @@ async function main() {
         || !Number.isSafeInteger(minimum) || minimum < 1) {
       throw new Error("Provide a transaction ID and a positive confirmation threshold.");
     }
-    const tx = await rpc("getrawtransaction", value, true);
+    const tx = await rpc("getrawtransaction", value, true).catch((error) => {
+      if (error.rpcCode !== -5) throw error;
+      throw new Error(
+        `Gridcoin RPC could not find ${value} at ${endpoint.origin}. `
+        + "Check that this is the transaction ID acknowledged by broadcast on the same Testnet node.",
+        { cause: error },
+      );
+    });
     if (tx.txid !== value.toLowerCase()) throw new Error("Gridcoin RPC returned a different transaction.");
     console.log(JSON.stringify(confirmedDeposit(tx, script, minimum), null, 2));
     return;

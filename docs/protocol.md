@@ -89,5 +89,10 @@ validator. Six confirmations below is an example Testnet threshold.
 node scripts/gridcoin-deposit.cjs check "$reserve" '<txid>' 6
 ```
 
+For the Testnet setup used by the Bash wrappers, run
+`bash bin/check_deposit.sh` from the repository root. It reads
+`bin/deposit.json` and defaults to six confirmations. Pass a JSON file and a
+confirmation threshold to override those defaults.
+
 This prints the recipient, exact amount in base units, deposit ID, and active
 block information. There is no Solana mint in this verification workflow.

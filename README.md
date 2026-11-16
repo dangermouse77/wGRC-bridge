@@ -514,24 +514,25 @@ The deposit script constructed, signed, broadcast, and validated a 1 GRC
 deposit on Gridcoin Testnet. Transaction
 `448bd13d7db71908372e30bb40f98134506810637339161bbbf34415499bf76e`
 carried the 37-byte payload in a one-base-unit `OP_RETURN` output and passed
-the `check` command at 10 active-chain confirmations. The verification
-covered the Gridcoin side of the bridge. Automatic Solana minting is part
-of Phase 3.
+the `check` command at 10 active-chain confirmations. Phase 3 reused this
+deposit to verify the relayer's mint flow.
 
 ### Phase 3 — Relayer and PostgreSQL
 
-The first milestone processes one confirmed Gridcoin Testnet deposit by
-transaction ID, records it in PostgreSQL, and verifies its finalized Devnet
-mint receipt. See the [deposit pilot runbook](runbooks/relayer-devnet.md) for
-the `solchain` and `pg-dsc` setup.
+The Rust relayer on `solchain` processed the confirmed Phase 2 deposit by
+transaction ID, minted 1 wGRC on Solana Devnet, and recorded the finalized
+receipt in `wgrcbridge_dev` on `pg-dsc`. Reprocessing the deposit returned the
+same receipt and mint signature without minting again. The
+[deposit pilot runbook](runbooks/relayer-devnet.md) covers setup and verification.
 
-- [ ] Implement Rust relayer.
-- [ ] Create PostgreSQL schema and migrations.
+- [x] Implement the Rust relayer command for a single deposit.
+- [x] Create the PostgreSQL deposit schema and migration.
+- [x] Verify deposit-backed Devnet minting and replay protection.
 - [ ] Implement Gridcoin watcher.
 - [ ] Implement Solana watcher.
-- [ ] Implement mint processing.
+- [ ] Connect deposit discovery to automatic mint processing.
 - [ ] Implement redemption processing.
-- [ ] Implement retry and recovery logic.
+- [ ] Implement automatic retries and recovery for the relayer.
 - [ ] Implement reserve reconciliation.
 
 ### Phase 4 — CLI and Integration Testing

@@ -6,11 +6,13 @@ const TESTNET_GENESIS = "00006e037d7b84104208ecf2a8638d23149d712ea810da604ee2f2c
 const MAX_AMOUNT = (1n << 64n) - 1n;
 const CARRIER_AMOUNT = 1n;
 
+class InvalidDeposit extends Error {}
+
 function baseUnits(value) {
   const match = /^(\d+)(?:\.(\d{1,8}))?$/.exec(value);
-  if (!match) throw new Error("Expected a GRC amount with up to eight decimal places.");
+  if (!match) throw new InvalidDeposit("Expected a GRC amount with up to eight decimal places.");
   const amount = BigInt(match[1]) * 100_000_000n + BigInt((match[2] ?? "").padEnd(8, "0"));
-  if (amount > MAX_AMOUNT) throw new Error("Amount exceeds the wGRC u64 range.");
+  if (amount > MAX_AMOUNT) throw new InvalidDeposit("Amount exceeds the wGRC u64 range.");
   return amount;
 }
 
@@ -18,23 +20,23 @@ function deposit(tx, reserveScript, genesis = TESTNET_GENESIS) {
   if (!/^[a-f0-9]{64}$/.test(tx.txid) || !tx.vin?.length || !Array.isArray(tx.vout)
       || tx.vin.some((input) => Object.hasOwn(input, "coinbase"))
       || tx.vout[0]?.scriptPubKey?.hex === "") {
-    throw new Error("Expected an ordinary Gridcoin transaction.");
+    throw new InvalidDeposit("Expected an ordinary Gridcoin transaction.");
   }
   const payments = tx.vout.filter((out) => out.scriptPubKey.hex === reserveScript);
   const carriers = tx.vout.filter((out) => out.scriptPubKey.hex.startsWith("6a"));
   if (payments.length !== 1 || carriers.length !== 1) {
-    throw new Error("Expected exactly one reserve payment and one OP_RETURN output.");
+    throw new InvalidDeposit("Expected exactly one reserve payment and one OP_RETURN output.");
   }
   const [payment] = payments;
   const [carrier] = carriers;
   const amount = baseUnits(payment.value);
   const payload = /^6a255747524301([a-f0-9]{64})$/.exec(carrier.scriptPubKey.hex);
   if (baseUnits(carrier.value) === 0n) {
-    throw new Error("This deposit has a zero-value OP_RETURN carrier. Recreate it with the updated create command.");
+    throw new InvalidDeposit("This deposit has a zero-value OP_RETURN carrier. Recreate it with the updated create command.");
   }
   if (!payload || baseUnits(carrier.value) !== CARRIER_AMOUNT || amount === 0n
       || !Number.isInteger(payment.n) || payment.n < 0 || payment.n > 0xffffffff) {
-    throw new Error("Invalid v1 deposit payload or reserve payment.");
+    throw new InvalidDeposit("Invalid v1 deposit payload or reserve payment.");
   }
   const index = Buffer.alloc(4);
   index.writeUInt32LE(payment.n);
@@ -84,20 +86,7 @@ function confirmedDeposit(tx, reserveScript, minimum) {
   return { ...result, blockhash: tx.blockhash, confirmations: tx.confirmations };
 }
 
-async function main() {
-  const [command, reserveAddress, value, extra, ...rest] = process.argv.slice(2);
-  const broadcast = command === "broadcast";
-  if (!reserveAddress || !value || (broadcast ? extra !== undefined : !extra) || rest.length
-      || !["create", "send", "broadcast", "check"].includes(command)) {
-    throw new Error("Usage: gridcoin-deposit.cjs create|send RESERVE GRC SOLANA_RECIPIENT\n"
-      + "       gridcoin-deposit.cjs broadcast RESERVE DEPOSIT_JSON_FILE\n"
-      + "       gridcoin-deposit.cjs check RESERVE TXID MIN_CONFIRMATIONS");
-  }
-  const prepared = broadcast ? JSON.parse(readFileSync(value, "utf8")) : null;
-  if (broadcast && (typeof prepared?.signedHex !== "string"
-      || !/^(?:[0-9a-fA-F]{2})+$/.test(prepared.signedHex))) {
-    throw new Error("Expected a deposit JSON file containing signedHex from create.");
-  }
+async function connectTestnet(reserveAddress) {
   const { GRC_RPC_USER, GRC_RPC_PASSWORD, GRC_RPC_URL = "http://127.0.0.1:25715" } = process.env;
   if (!GRC_RPC_USER || !GRC_RPC_PASSWORD) throw new Error("Set GRC_RPC_USER and GRC_RPC_PASSWORD.");
   const endpoint = new URL(GRC_RPC_URL);
@@ -147,6 +136,24 @@ async function main() {
   if (!/^(76a914[a-f0-9]{40}88ac|a914[a-f0-9]{40}87)$/.test(script ?? "")) {
     throw new Error("Expected a Testnet P2PKH or P2SH reserve script.");
   }
+  return { rpc, endpoint, address, script };
+}
+
+async function main() {
+  const [command, reserveAddress, value, extra, ...rest] = process.argv.slice(2);
+  const broadcast = command === "broadcast";
+  if (!reserveAddress || !value || (broadcast ? extra !== undefined : !extra) || rest.length
+      || !["create", "send", "broadcast", "check"].includes(command)) {
+    throw new Error("Usage: gridcoin-deposit.cjs create|send RESERVE GRC SOLANA_RECIPIENT\n"
+      + "       gridcoin-deposit.cjs broadcast RESERVE DEPOSIT_JSON_FILE\n"
+      + "       gridcoin-deposit.cjs check RESERVE TXID MIN_CONFIRMATIONS");
+  }
+  const prepared = broadcast ? JSON.parse(readFileSync(value, "utf8")) : null;
+  if (broadcast && (typeof prepared?.signedHex !== "string"
+      || !/^(?:[0-9a-fA-F]{2})+$/.test(prepared.signedHex))) {
+    throw new Error("Expected a deposit JSON file containing signedHex from create.");
+  }
+  const { rpc, endpoint, address, script } = await connectTestnet(reserveAddress);
 
   async function broadcastDeposit(record, signedHex) {
     console.error(`Broadcasting Gridcoin Testnet transaction ${record.txid}`);
@@ -206,7 +213,7 @@ async function main() {
   console.log(JSON.stringify({ ...record, signedHex }, null, 2));
 }
 
-module.exports = { baseUnits, deposit, confirmedDeposit, fundCarrier };
+module.exports = { baseUnits, deposit, confirmedDeposit, fundCarrier, connectTestnet, InvalidDeposit };
 if (require.main === module) {
   main().catch((error) => {
     console.error(error.message);

@@ -76,3 +76,100 @@ The finalized receipt can recover the database state even when the transaction
 signature is unavailable. If the deposit is reported in a different Gridcoin
 block, reconcile the deposit and the Solana receipt before changing its
 database record.
+
+## Watch Gridcoin Testnet for deposits
+
+Apply the watcher migration once to `wgrcbridge_dev` with the database owner
+or migration role. If the relayer connects as a separate role, grant it
+`SELECT`, `INSERT`, and `DELETE` on `wgrc.gridcoin_blocks` and
+`SELECT` and `INSERT` on `wgrc.gridcoin_deposit_discoveries`.
+
+```bash
+psql -X -W -h pg-dsc -d wgrcbridge_dev -U '<migration role>' \
+  -v ON_ERROR_STOP=1 -f relayer/migrations/002_gridcoin_watcher.sql
+```
+
+Use the same Gridcoin RPC, reserve and confirmation settings as the deposit
+pilot. On `gridtestnet`, obtain the Phase 2 block height from the block hash
+reported by the deposit validator. For example, run the following with the
+node's usual Testnet RPC configuration and take the `height` from the output.
+
+```bash
+gridcoinresearchd -testnet getblock 20f874f279b774f572339be613b211efe54278be33befea58360e9331cb4c12b
+```
+
+On `solchain`, from the repository root, replace `<start height>` with the
+height of that block and run a catch-up pass.
+
+```bash
+cargo run -p wgrc-relayer -- watch-gridcoin '<start height>' --once
+```
+
+The starting block is included. Use the same starting height on subsequent
+runs. The watcher resumes from the last committed block for the configured
+reserve. Omit `--once` to keep polling every 15 seconds after catching up.
+The watcher discovers confirmed payments without needing a Solana wallet.
+The `process-deposit` command still handles minting.
+
+```sql
+SELECT d.block_height, b.block_hash, d.deposit_id, d.amount_base_units, d.recipient
+FROM wgrc.gridcoin_deposit_discoveries AS d
+JOIN wgrc.gridcoin_blocks AS b
+  ON b.reserve_address = d.reserve_address AND b.height = d.block_height
+WHERE d.txid = '448bd13d7db71908372e30bb40f98134506810637339161bbbf34415499bf76e';
+```
+
+Expect one discovery with `amount_base_units = 100000000` and the Phase 2
+deposit ID. Run the catch-up command again to verify it resumes without
+duplicating the discovery. On a reorganization, the watcher drops orphaned
+discoveries and scans the replacement blocks. If an orphaned block already
+has a mint record, reconcile it before restarting. If an RPC or database
+error interrupts a scan, restart using the same command and starting height.
+
+## Watch Gridcoin Testnet for deposits
+
+Apply the watcher migration once to `wgrcbridge_dev` with the database owner
+or migration role. If the relayer connects as a separate role, grant it
+`SELECT`, `INSERT`, and `DELETE` on `wgrc.gridcoin_blocks` and
+`SELECT` and `INSERT` on `wgrc.gridcoin_deposit_discoveries`.
+
+```bash
+psql -X -W -h pg-dsc -d wgrcbridge_dev -U '<migration role>' \
+  -v ON_ERROR_STOP=1 -f relayer/migrations/002_gridcoin_watcher.sql
+```
+
+Use the same Gridcoin RPC, reserve and confirmation settings as the deposit
+pilot. On `gridtestnet`, obtain the Phase 2 block height from the block hash
+reported by the deposit validator. For example, run the following with the
+node's usual Testnet RPC configuration and take the `height` from the output.
+
+```bash
+gridcoinresearchd -testnet getblock 20f874f279b774f572339be613b211efe54278be33befea58360e9331cb4c12b
+```
+
+On `solchain`, from the repository root, replace `<start height>` with the
+height of that block and run a catch-up pass.
+
+```bash
+cargo run -p wgrc-relayer -- watch-gridcoin '<start height>' --once
+```
+
+The starting block is included. Use the same starting height on subsequent
+runs. The watcher resumes from the last committed block for the configured
+reserve. Omit `--once` to keep polling every 15 seconds after catching up.
+The watcher discovers confirmed payments without needing a Solana wallet.
+The `process-deposit` command still handles minting.
+
+```sql
+SELECT d.block_height, b.block_hash, d.deposit_id, d.amount_base_units, d.recipient
+FROM wgrc.gridcoin_deposit_discoveries AS d
+JOIN wgrc.gridcoin_blocks AS b USING (reserve_address, block_height)
+WHERE d.txid = '448bd13d7db71908372e30bb40f98134506810637339161bbbf34415499bf76e';
+```
+
+Expect one discovery with `amount_base_units = 100000000` and the Phase 2
+deposit ID. Run the catch-up command again to verify it resumes without
+duplicating the discovery. On a reorganization, the watcher drops orphaned
+discoveries and scans the replacement blocks. If an orphaned block already
+has a mint record, reconcile it before restarting. If an RPC or database
+error interrupts a scan, restart using the same command and starting height.

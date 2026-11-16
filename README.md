@@ -528,7 +528,8 @@ same receipt and mint signature without minting again. The
 - [x] Implement the Rust relayer command for a single deposit.
 - [x] Create the PostgreSQL deposit schema and migration.
 - [x] Verify deposit-backed Devnet minting and replay protection.
-- [ ] Implement Gridcoin watcher.
+- [x] Implement Gridcoin Testnet deposit discovery with PostgreSQL checkpoints.
+- [ ] Verify the Gridcoin watcher against the live Testnet node.
 - [ ] Implement Solana watcher.
 - [ ] Connect deposit discovery to automatic mint processing.
 - [ ] Implement redemption processing.

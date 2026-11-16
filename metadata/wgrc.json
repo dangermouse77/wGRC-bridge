@@ -1,6 +1,7 @@
 {
   "name": "Wrapped Gridcoin",
   "symbol": "wGRC",
-  "description": "Wrapped Gridcoin on Solana.",
+  "description": "Wrapped Gridcoin (wGRC) is a Solana token from the open-source wGRC Bridge, which is designed to let users wrap native Gridcoin (GRC) and redeem it at a 1:1 ratio. The bridge is currently a proof of concept.",
+  "external_url": "https://github.com/dangermouse77/wGRC-bridge",
   "image": "https://raw.githubusercontent.com/dangermouse77/wGRC-bridge/refs/heads/main/metadata/wgrc.svg"
 }

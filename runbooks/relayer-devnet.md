@@ -6,15 +6,28 @@ The command processes one confirmed Gridcoin transaction by ID.
 
 ## Prepare the database
 
-On `solchain`, export `DATABASE_URL` for a dedicated development database on
-`pg-dsc`. Configure the host, database, role, and TLS settings for that server.
-Keep credentials out of shell history and the repository. Apply the migration
-once with the database owner or a role that can create the `wgrc` schema.
+Both databases live on `pg-dsc` and use the same `wgrc` schema. On `solchain`,
+create the development connection file, then fill in the role and password.
+
+```bash
+install -m 600 relayer/database.dev.example.json relayer/database.dev.json
+```
+
+The relayer reads `relayer/database.dev.json` from the repository root.
+An exported `DATABASE_URL` takes precedence. Unset it to use the JSON file.
+For production, copy `relayer/database.prod.example.json` to
+`relayer/database.prod.json` in the production environment and fill in the
+production role and password. Git ignores both credential files. The deposit
+pilot connects to the development database for Testnet and Devnet activity.
+
+Apply the same SQL migration once per database, using its owner or a role that
+can create the `wgrc` schema. For the pilot, run it against `wgrcbridge_dev`.
 If you use a separate runtime role, grant it schema usage and table select,
 insert, and update privileges.
 
 ```bash
-psql -X -v ON_ERROR_STOP=1 -f relayer/migrations/001_testnet_deposits.sql "$DATABASE_URL"
+psql -X -W -h pg-dsc -d wgrcbridge_dev -U '<migration role>' \
+  -v ON_ERROR_STOP=1 -f relayer/migrations/001_testnet_deposits.sql
 ```
 
 ## Process the Testnet deposit

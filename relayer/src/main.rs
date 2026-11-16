@@ -2,9 +2,43 @@ use native_tls::TlsConnector;
 use postgres::Config;
 use postgres_native_tls::MakeTlsConnector;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use std::{env, error::Error, process::Command, time::Duration};
+use std::{env, error::Error, fs, process::Command, time::Duration};
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
+
+#[derive(Deserialize)]
+struct DatabaseSettings {
+    host: String,
+    database: String,
+    username: String,
+    password: String,
+}
+
+fn database_config() -> Result<Config> {
+    let mut config = match env::var("DATABASE_URL") {
+        Ok(url) => url.parse::<Config>().map_err(|_| "Invalid DATABASE_URL")?,
+        Err(env::VarError::NotPresent) => {
+            const PATH: &str = "relayer/database.dev.json";
+            let content = fs::read(PATH)
+                .map_err(|error| format!("Cannot read {PATH}: {error}"))?;
+            let settings: DatabaseSettings = serde_json::from_slice(&content)
+                .map_err(|_| format!("Invalid {PATH}. Expected host, database, username, and password."))?;
+            let mut config = Config::new();
+            config
+                .host(&settings.host)
+                .dbname(&settings.database)
+                .user(&settings.username)
+                .password(settings.password.as_bytes());
+            config
+        }
+        Err(error) => return Err(error.into()),
+    };
+    if config.get_dbname().or_else(|| config.get_user()) == Some("wgrcbridge_prod") {
+        return Err("Use wgrcbridge_dev for the Testnet-to-Devnet deposit pilot.".into());
+    }
+    config.connect_timeout(Duration::from_secs(10));
+    Ok(config)
+}
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -49,11 +83,7 @@ fn run() -> Result<()> {
     }
     let reserve = env::var("WGRC_TESTNET_RESERVE_ADDRESS")?;
     let minimum = env::var("WGRC_MIN_CONFIRMATIONS").unwrap_or_else(|_| "6".into());
-    let mut config: Config = env::var("DATABASE_URL")?
-        .parse()
-        .map_err(|_| "Invalid DATABASE_URL")?;
-    config.connect_timeout(Duration::from_secs(10));
-    let mut db = config.connect(MakeTlsConnector::new(TlsConnector::new()?))?;
+    let mut db = database_config()?.connect(MakeTlsConnector::new(TlsConnector::new()?))?;
 
     let deposit: Deposit = node(
         "scripts/gridcoin-deposit.cjs",

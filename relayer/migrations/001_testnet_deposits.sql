@@ -1,6 +1,6 @@
 BEGIN;
 
--- This schema tracks the Gridcoin Testnet to Solana Devnet deployment only.
+-- Use the same schema in each environment's database.
 CREATE SCHEMA wgrc;
 
 CREATE TABLE wgrc.deposits (

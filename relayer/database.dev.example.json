@@ -1,0 +1,6 @@
+{
+  "host": "pg-dsc",
+  "database": "wgrcbridge_dev",
+  "username": "replace-with-dev-role",
+  "password": "replace-with-dev-password"
+}

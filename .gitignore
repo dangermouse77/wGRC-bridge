@@ -4,3 +4,5 @@
 /.surfpool/
 Cargo.lock
 package-lock.json
+/relayer/database.dev.json
+/relayer/database.prod.json

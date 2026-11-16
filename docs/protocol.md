@@ -83,16 +83,17 @@ original ID before attempting another deposit. The `send` command builds a
 new transaction and is intended for a new deposit.
 
 After the transaction reaches the desired depth, inspect it using the
-validator. Six confirmations below is an example Testnet threshold.
+validator. The Testnet wrappers and relayer default to 10 confirmations.
 
 ```bash
-node scripts/gridcoin-deposit.cjs check "$reserve" '<txid>' 6
+node scripts/gridcoin-deposit.cjs check "$reserve" '<txid>' 10
 ```
 
 For the Testnet setup used by the Bash wrappers, run
 `bash bin/check_deposit.sh` from the repository root. It reads
-`bin/deposit.json` and defaults to six confirmations. Pass a JSON file and a
-confirmation threshold to override those defaults.
+`bin/deposit.json`. Set `WGRC_MIN_CONFIRMATIONS` to use a different threshold
+for both the wrapper and the relayer. The wrapper also accepts a JSON file and
+an explicit confirmation threshold for an individual check.
 
 This prints the recipient, exact amount in base units, deposit ID, and active
 block information. There is no Solana mint in this verification workflow.

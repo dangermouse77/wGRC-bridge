@@ -8,7 +8,7 @@ fi
 source "$(dirname -- "${BASH_SOURCE[0]}")/deposit-common.sh"
 
 deposit_file="${1:-$script_dir/deposit.json}"
-minimum="${2:-${WGRC_MIN_CONFIRMATIONS:-6}}"
+minimum="${2:-${WGRC_MIN_CONFIRMATIONS:-$(<"$script_dir/../relayer/gridcoin-min-confirmations.txt")}}"
 txid="$(deposit_txid "$deposit_file")"
 
 exec node "$script_dir/../scripts/gridcoin-deposit.cjs" check "$reserve" "$txid" "$minimum"

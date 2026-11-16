@@ -89,7 +89,8 @@ fn run() -> Result<()> {
         _ => return Err("Usage: wgrc-relayer process-deposit TXID | watch-gridcoin START_HEIGHT [--once]".into()),
     };
     let reserve = env::var("WGRC_TESTNET_RESERVE_ADDRESS")?;
-    let minimum = env::var("WGRC_MIN_CONFIRMATIONS").unwrap_or_else(|_| "6".into());
+    let minimum = env::var("WGRC_MIN_CONFIRMATIONS")
+        .unwrap_or_else(|_| include_str!("../gridcoin-min-confirmations.txt").trim().into());
     let mut db = database_config()?.connect(MakeTlsConnector::new(TlsConnector::new()?))?;
     if let Some((height, once)) = watch_start {
         return gridcoin_watcher::watch(&mut db, &reserve, &minimum, height, once);

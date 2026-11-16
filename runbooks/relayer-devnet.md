@@ -46,13 +46,15 @@ creation.
 
 ```bash
 export WGRC_TESTNET_RESERVE_ADDRESS='<Phase 2 Gridcoin Testnet reserve address>'
-export WGRC_MIN_CONFIRMATIONS=6
 export ANCHOR_PROVIDER_URL=https://api.devnet.solana.com
 export ANCHOR_WALLET='<absolute path to the Devnet mint operator keypair>'
 
 cargo run -p wgrc-relayer -- process-deposit \
   448bd13d7db71908372e30bb40f98134506810637339161bbbf34415499bf76e
 ```
+
+The deposit check, watcher and mint all default to 10 confirmations. Set
+`WGRC_MIN_CONFIRMATIONS` in the shell running them to override that default.
 
 The command records the validated amount in base units, reserve output,
 recipient, and Gridcoin block before submitting the mint. It rechecks Gridcoin

@@ -520,6 +520,11 @@ of Phase 3.
 
 ### Phase 3 — Relayer and PostgreSQL
 
+The first milestone processes one confirmed Gridcoin Testnet deposit by
+transaction ID, records it in PostgreSQL, and verifies its finalized Devnet
+mint receipt. See the [deposit pilot runbook](runbooks/relayer-devnet.md) for
+the `solchain` and `pg-dsc` setup.
+
 - [ ] Implement Rust relayer.
 - [ ] Create PostgreSQL schema and migrations.
 - [ ] Implement Gridcoin watcher.

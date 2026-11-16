@@ -41,7 +41,10 @@ fn run() -> Result<()> {
     let [command, txid] = args.as_slice() else {
         return Err("Usage: wgrc-relayer process-deposit TXID (run from the repository root)".into());
     };
-    if command != "process-deposit" || txid.len() != 64 || !txid.bytes().all(|b| b.is_ascii_hexdigit()) {
+    if command != "process-deposit"
+        || txid.len() != 64
+        || !txid.bytes().all(|byte| byte.is_ascii_hexdigit())
+    {
         return Err("Expected process-deposit and a 64-character Gridcoin transaction ID".into());
     }
     let reserve = env::var("WGRC_TESTNET_RESERVE_ADDRESS")?;
@@ -57,24 +60,23 @@ fn run() -> Result<()> {
         &["check", &reserve, txid, &minimum],
     )?;
     let vout = i64::from(deposit.vout);
-    // Commit the observation before touching Solana. A retry can update an
-    // unminted deposit after a reorg, but keeps the mint's original evidence.
-    let row = db.query_opt(
+    // Commit the original block before touching Solana. A pending row may
+    // already have an on-chain mint if the previous run lost its RPC response.
+    let matched = db.execute(
         "INSERT INTO wgrc.deposits AS d
             (deposit_id, txid, vout, reserve_address, recipient, amount_base_units,
              block_hash, confirmations)
          VALUES ($1, $2, $3, $4, $5, $6::text::numeric, $7, $8)
          ON CONFLICT (deposit_id) DO UPDATE SET
-            block_hash = CASE WHEN d.finalized_at IS NULL THEN excluded.block_hash ELSE d.block_hash END,
             confirmations = CASE WHEN d.finalized_at IS NULL THEN excluded.confirmations ELSE d.confirmations END
-         WHERE (d.txid, d.vout, d.reserve_address, d.recipient, d.amount_base_units)
-             = (excluded.txid, excluded.vout, excluded.reserve_address, excluded.recipient, excluded.amount_base_units)
-         RETURNING block_hash, finalized_at IS NOT NULL",
+         WHERE (d.txid, d.vout, d.reserve_address, d.recipient, d.amount_base_units, d.block_hash)
+             = (excluded.txid, excluded.vout, excluded.reserve_address, excluded.recipient,
+                excluded.amount_base_units, excluded.block_hash)",
         &[&deposit.deposit_id, &deposit.txid, &vout, &reserve, &deposit.recipient,
           &deposit.amount_base_units, &deposit.blockhash, &deposit.confirmations],
-    )?.ok_or("Stored deposit conflicts with Gridcoin validation")?;
-    if row.get::<_, bool>(1) && row.get::<_, String>(0) != deposit.blockhash {
-        return Err("A minted deposit changed blocks. Reconcile Gridcoin backing before retrying.".into());
+    )?;
+    if matched == 0 {
+        return Err("Stored deposit or block differs from Gridcoin validation. Reconcile before retrying.".into());
     }
 
     let mut transaction = db.transaction()?;

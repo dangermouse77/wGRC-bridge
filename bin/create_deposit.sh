@@ -1,15 +1,7 @@
 #!/bin/bash
-if [[ -z ${GRC_RPC_PASSWORD:-} ]]; then
+set -euo pipefail
+source "$(dirname -- "${BASH_SOURCE[0]}")/deposit-common.sh"
 
-  read -rsp 'Gridcoin RPC password: ' GRC_RPC_PASSWORD; echo
-  export GRC_RPC_PASSWORD
-
-fi
-
-export GRC_RPC_USER=dangermouse
-export GRC_RPC_URL='http://gridtestnet:25715'
-node ../scripts/gridcoin-deposit.cjs create \
-  'mttYZdNgbn3f5767arC4i8CCzncH29z86h' 1.00000000 \
-  'FWakmcaVqecEfFbxJKang1KoTp6A6JMJ1LSVygLx1JQC' > deposit.json
-
-cat ./deposit.json
+deposit="$(node "$script_dir/../scripts/gridcoin-deposit.cjs" create \
+  "$reserve" 1.00000000 'FWakmcaVqecEfFbxJKang1KoTp6A6JMJ1LSVygLx1JQC')"
+printf '%s\n' "$deposit" | tee "$script_dir/deposit.json"

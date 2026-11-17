@@ -93,6 +93,52 @@ signature is unavailable. If the deposit is reported in a different Gridcoin
 block, reconcile the deposit and the Solana receipt before changing its
 database record.
 
+## Watch Solana Devnet for withdrawals
+
+Apply migration `003` once to the development database from the repository
+root on `solchain`. If you use a separate relayer role, grant it `SELECT`,
+`INSERT`, and `UPDATE` on both tables created by the migration.
+
+```bash
+psql -X -W -h pg-bridge -p 5432 -d d_wgrcbridge_dev -U '<migration role>' \
+  -v ON_ERROR_STOP=1 -f relayer/migrations/003_solana_watcher.sql
+```
+
+Use the development bridge config and the same Node dependencies and
+generated Anchor IDL as the deposit pilot. The watcher needs Devnet RPC
+access. It can run with no signing wallet or Gridcoin RPC credentials.
+
+```bash
+export ANCHOR_PROVIDER_URL=https://api.devnet.solana.com
+cargo run -p wgrc-relayer -- watch-solana --once
+```
+
+The watcher reads the current finalized set of escrow withdrawal accounts.
+It records each withdrawal by its Solana account address with the owner,
+nonce, exact amount, Gridcoin destination, and on-chain status. The recorded
+slot is when the watcher observed the state. Pending requests and requests
+that already reached settlement or cancellation can all be discovered
+after a restart. Older burn-first accounts require separate reconciliation.
+For settled accounts, the Gridcoin transaction ID is the operator's on-chain
+attestation. Verifying that payout on Gridcoin is part of redemption processing.
+
+```sql
+SELECT withdrawal_address, owner_address, nonce, amount_base_units, gridcoin_address,
+       status, gridcoin_payout_txid, first_observed_slot, last_changed_slot
+FROM wgrc.solana_withdrawals
+ORDER BY first_observed_slot, withdrawal_address;
+
+SELECT finalized_slot FROM wgrc.solana_withdrawal_checkpoint;
+```
+
+Compare a known finalized Devnet withdrawal with its PostgreSQL row. The
+existing Devnet smoke test's escrow withdrawal can serve as a terminal-state
+fixture. Use a finalized escrow request left pending to verify discovery
+before settlement. Rerun the same command and expect zero new or changed
+requests if no accounts changed. The row's observation slots should remain
+the same. Omit `--once` to scan every 15 seconds. The watcher records
+withdrawals. Gridcoin payouts and Solana settlement are separate operations.
+
 ## Watch Gridcoin Testnet for deposits
 
 Apply the watcher migration once to `wgrcbridge_dev` with the database owner

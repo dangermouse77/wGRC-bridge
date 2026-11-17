@@ -534,7 +534,8 @@ resumed from its checkpoint and scanned only the two newly eligible blocks.
 - [x] Verify deposit-backed Devnet minting and replay protection.
 - [x] Implement Gridcoin Testnet deposit discovery with PostgreSQL checkpoints.
 - [x] Verify the Gridcoin watcher against the live Testnet node.
-- [ ] Implement Solana watcher.
+- [x] Implement finalized Solana Devnet withdrawal discovery with PostgreSQL checkpoints.
+- [ ] Verify the Solana watcher against live Devnet withdrawals.
 - [ ] Connect deposit discovery to automatic mint processing.
 - [ ] Implement redemption processing.
 - [ ] Implement automatic retries and recovery for the relayer.

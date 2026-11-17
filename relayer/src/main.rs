@@ -7,6 +7,7 @@ use std::{env, error::Error, fs, process::Command, time::Duration};
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
 mod gridcoin_watcher;
+mod solana_watcher;
 
 const DEV_CONFIG: &str = "relayer/bridge.dev.json";
 const LEGACY_DEV_CONFIG: &str = "relayer/database.dev.json";
@@ -94,27 +95,44 @@ fn node<T: DeserializeOwned>(script: &str, args: &[&str]) -> Result<T> {
     Ok(serde_json::from_slice(&output.stdout)?)
 }
 
+enum Action<'a> {
+    ProcessDeposit(&'a str),
+    WatchGridcoin { height: i64, once: bool },
+    WatchSolana { once: bool },
+}
+
 fn run() -> Result<()> {
     let args: Vec<_> = env::args().skip(1).collect();
-    let watch_start = match args.as_slice() {
+    let action = match args.as_slice() {
         [command, txid]
             if command == "process-deposit"
                 && txid.len() == 64
-                && txid.bytes().all(|byte| byte.is_ascii_hexdigit()) => None,
+                && txid.bytes().all(|byte| byte.is_ascii_hexdigit()) => Action::ProcessDeposit(txid),
         [command, height, flags @ ..]
             if command == "watch-gridcoin"
                 && (flags.is_empty() || (flags.len() == 1 && flags[0] == "--once")) =>
         {
             let height: u32 = height.parse().map_err(|_| "Expected a nonnegative block height")?;
-            Some((i64::from(height), !flags.is_empty()))
+            Action::WatchGridcoin { height: i64::from(height), once: !flags.is_empty() }
         }
-        _ => return Err("Usage: wgrc-relayer process-deposit TXID | watch-gridcoin START_HEIGHT [--once]".into()),
+        [command, flags @ ..]
+            if command == "watch-solana"
+                && (flags.is_empty() || (flags.len() == 1 && flags[0] == "--once")) =>
+        {
+            Action::WatchSolana { once: !flags.is_empty() }
+        }
+        _ => return Err("Usage: wgrc-relayer process-deposit TXID | watch-gridcoin START_HEIGHT [--once] | watch-solana [--once]".into()),
     };
     let bridge_config = match fs::read(DEV_CONFIG) {
         Ok(content) => Some(content),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
         Err(error) => return Err(format!("Cannot read {DEV_CONFIG}: {error}").into()),
     };
+    let mut db = database_config(bridge_config.as_deref())?
+        .connect(MakeTlsConnector::new(TlsConnector::new()?))?;
+    if let Action::WatchSolana { once } = action {
+        return solana_watcher::watch(&mut db, once);
+    }
     let settings: BridgeSettings = match bridge_config.as_deref() {
         Some(content) => serde_json::from_slice(content)
             .map_err(|_| format!("Invalid bridge settings in {DEV_CONFIG}."))?,
@@ -130,14 +148,17 @@ fn run() -> Result<()> {
         .ok_or("Missing Gridcoin deposit address")?;
     let minimum = env::var("WGRC_MIN_CONFIRMATIONS")
         .unwrap_or_else(|_| include_str!("../gridcoin-min-confirmations.txt").trim().into());
-    let mut db = database_config(bridge_config.as_deref())?
-        .connect(MakeTlsConnector::new(TlsConnector::new()?))?;
-    if let Some((height, once)) = watch_start {
-        return gridcoin_watcher::watch(&mut db, &reserve, &minimum, height, once);
+    match action {
+        Action::WatchGridcoin { height, once } => {
+            gridcoin_watcher::watch(&mut db, &reserve, &minimum, height, once)
+        }
+        Action::ProcessDeposit(txid) => {
+            let mint = settings.wgrc_mint_address.or(defaults.wgrc_mint_address)
+                .ok_or("Missing wGRC mint address")?;
+            process_deposit(&mut db, &reserve, &minimum, txid, &mint)
+        }
+        Action::WatchSolana { .. } => unreachable!("Solana watcher handled above"),
     }
-    let mint = settings.wgrc_mint_address.or(defaults.wgrc_mint_address)
-        .ok_or("Missing wGRC mint address")?;
-    process_deposit(&mut db, &reserve, &minimum, &args[1], &mint)
 }
 
 fn process_deposit(db: &mut Client, reserve: &str, minimum: &str, txid: &str, mint: &str) -> Result<()> {

@@ -6,3 +6,5 @@ Cargo.lock
 package-lock.json
 /relayer/database.dev.json
 /relayer/database.prod.json
+/relayer/bridge.dev.json
+/relayer/bridge.prod.json

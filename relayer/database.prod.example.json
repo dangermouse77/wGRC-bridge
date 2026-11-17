@@ -1,6 +1,0 @@
-{
-  "host": "pg-bridge",
-  "database": "d_wgrcbridge_prod",
-  "username": "wgrcbridge_prod",
-  "password": "replace-with-prod-password"
-}

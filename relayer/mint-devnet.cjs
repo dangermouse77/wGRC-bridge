@@ -15,7 +15,7 @@ const PROGRAM_ID = "AvqkRykFXfx31fDYnJq7kPkNpgiMA6LbknavHMvjz3Zy";
 const run = promisify(execFile);
 
 async function main() {
-  const [mode, reserve, minimum, input] = process.argv.slice(2);
+  const [mode, reserve, minimum, input, expectedMint] = process.argv.slice(2);
   assert.ok(mode === "mint" || mode === "verify", "Expected mint or verify mode.");
   assert.equal(process.env.ANCHOR_PROVIDER_URL, DEVNET_URL, "Set the Solana Devnet RPC URL.");
   const deposit = JSON.parse(input);
@@ -36,6 +36,7 @@ async function main() {
     PublicKey.findProgramAddressSync([Buffer.from(seed), ...seeds], program.programId)[0];
   const bridge = pda("bridge");
   const mint = pda("mint");
+  assert.equal(mint.toBase58(), expectedMint, "Configured wGRC mint differs from the Devnet bridge mint.");
   const depositReceipt = pda("deposit", depositId);
 
   async function hasMatchingReceipt() {

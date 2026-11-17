@@ -1,32 +1,45 @@
 # Phase 3 deposit pilot
 
 Run the relayer on `solchain` with Gridcoin Testnet RPC on `gridtestnet`,
-PostgreSQL on `pg-dsc`, and the existing wGRC deployment on Solana Devnet.
+PostgreSQL on `pg-bridge`, and the existing wGRC deployment on Solana Devnet.
 The command processes one confirmed Gridcoin transaction by ID.
 
-## Prepare the database
+## Configure the bridge
 
-Both databases live on `pg-dsc` and use the same `wgrc` schema. On `solchain`,
-create the development connection file, then fill in the role and password.
+Both databases use the same `wgrc` schema. For a fresh setup on `solchain`,
+copy the development template and fill in the database credentials.
 
 ```bash
-install -m 600 relayer/database.dev.example.json relayer/database.dev.json
+install -m 600 relayer/bridge.dev.example.json relayer/bridge.dev.json
 ```
 
-The relayer reads `relayer/database.dev.json` from the repository root.
-An exported `DATABASE_URL` takes precedence. Unset it to use the JSON file.
-For production, copy `relayer/database.prod.example.json` to
-`relayer/database.prod.json` in the production environment and fill in the
-production role and password. Git ignores both credential files. The deposit
-pilot connects to the development database for Testnet and Devnet activity.
+For an existing setup, rename `relayer/database.dev.json` to
+`relayer/bridge.dev.json` and copy the three public address fields from the
+example. The relayer still accepts the old file for database credentials if
+the new file is absent. An exported `DATABASE_URL` overrides the database
+connection fields. `WGRC_TESTNET_RESERVE_ADDRESS` or `GRC_RESERVE_ADDRESS`
+can override the configured deposit address.
+
+The development example includes the current Gridcoin Testnet deposit
+address and Solana Devnet wGRC mint. Set `solana_program_upgrade_authority`
+to the public upgrade authority reported for the deployed program:
+
+```bash
+solana --url devnet program show AvqkRykFXfx31fDYnJq7kPkNpgiMA6LbknavHMvjz3Zy
+```
+
+This field records the upgrade authority. The mint operator still signs
+with the keypair specified by `ANCHOR_WALLET`. For production, use
+`relayer/bridge.prod.example.json` to create `relayer/bridge.prod.json`
+and fill in the deployment addresses when known. Git ignores both local files.
 
 Apply the same SQL migration once per database, using its owner or a role that
-can create the `wgrc` schema. For the pilot, run it against `wgrcbridge_dev`.
+can create the `wgrc` schema. For the pilot, run it against `d_wgrcbridge_dev`.
 If you use a separate runtime role, grant it schema usage and table select,
 insert, and update privileges.
 
 ```bash
-psql -X -W -h pg-dsc -d wgrcbridge_dev -U '<migration role>' \
+psql -X -W -h pg-bridge -d d_wgrcbridge_dev -U '<migration role>' \
   -v ON_ERROR_STOP=1 -f relayer/migrations/001_testnet_deposits.sql
 ```
 
@@ -45,7 +58,7 @@ must be the bridge's configured mint operator and have SOL for fees and account
 creation.
 
 ```bash
-export WGRC_TESTNET_RESERVE_ADDRESS='<Phase 2 Gridcoin Testnet reserve address>'
+export WGRC_TESTNET_RESERVE_ADDRESS='mttYZdNgbn3f5767arC4i8CCzncH29z86h'
 export ANCHOR_PROVIDER_URL=https://api.devnet.solana.com
 export ANCHOR_WALLET='<absolute path to the Devnet mint operator keypair>'
 

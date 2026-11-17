@@ -228,9 +228,9 @@ The bridge supports two independently configured environments.
 Configuration files:
 
 ```text
-config/
-├── devnet.toml
-└── mainnet.toml
+relayer/
+├── bridge.dev.example.json
+└── bridge.prod.example.json
 ```
 
 Sensitive information must never be committed to the repository.

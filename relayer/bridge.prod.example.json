@@ -1,0 +1,9 @@
+{
+  "host": "pg-bridge",
+  "database": "d_wgrcbridge_prod",
+  "username": "wgrcbridge_prod",
+  "password": "replace-with-prod-password",
+  "solana_program_upgrade_authority": "4e7X5yuHVQib2Xdr78Y47aFVjtL6JtJThcjqajkoSfUi",
+  "gridcoin_deposit_address": "S4Wm8GqcgPYVD6F3aJEw69Bt7miLHuZxse",
+  "wgrc_mint_address": null
+}

@@ -8,6 +8,15 @@ type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
 mod gridcoin_watcher;
 
+const DEV_CONFIG: &str = "relayer/bridge.dev.json";
+const LEGACY_DEV_CONFIG: &str = "relayer/database.dev.json";
+
+#[derive(Default, Deserialize)]
+struct BridgeSettings {
+    gridcoin_deposit_address: Option<String>,
+    wgrc_mint_address: Option<String>,
+}
+
 #[derive(Deserialize)]
 struct DatabaseSettings {
     host: String,
@@ -16,15 +25,23 @@ struct DatabaseSettings {
     password: String,
 }
 
-fn database_config() -> Result<Config> {
+fn database_config(bridge_config: Option<&[u8]>) -> Result<Config> {
     let mut config = match env::var("DATABASE_URL") {
         Ok(url) => url.parse::<Config>().map_err(|_| "Invalid DATABASE_URL")?,
         Err(env::VarError::NotPresent) => {
-            const PATH: &str = "relayer/database.dev.json";
-            let content = fs::read(PATH)
-                .map_err(|error| format!("Cannot read {PATH}: {error}"))?;
-            let settings: DatabaseSettings = serde_json::from_slice(&content)
-                .map_err(|_| format!("Invalid {PATH}. Expected host, database, username, and password."))?;
+            let legacy;
+            let (content, path) = match bridge_config {
+                Some(content) => (content, DEV_CONFIG),
+                None => {
+                    legacy = fs::read(LEGACY_DEV_CONFIG).map_err(|error| {
+                        format!("Cannot read {LEGACY_DEV_CONFIG}: {error}. Create {DEV_CONFIG} or set DATABASE_URL.")
+                    })?;
+                    (legacy.as_slice(), LEGACY_DEV_CONFIG)
+                }
+            };
+            let settings: DatabaseSettings = serde_json::from_slice(content).map_err(|_| {
+                format!("Invalid {path}. Expected host, database, username, and password.")
+            })?;
             let mut config = Config::new();
             config
                 .host(&settings.host)
@@ -35,8 +52,11 @@ fn database_config() -> Result<Config> {
         }
         Err(error) => return Err(error.into()),
     };
-    if config.get_dbname().or_else(|| config.get_user()) == Some("wgrcbridge_prod") {
-        return Err("Use wgrcbridge_dev for the Testnet-to-Devnet deposit pilot.".into());
+    if matches!(
+        config.get_dbname().or_else(|| config.get_user()),
+        Some("wgrcbridge_prod" | "d_wgrcbridge_prod")
+    ) {
+        return Err("Use the development database for the Testnet-to-Devnet deposit pilot.".into());
     }
     config.connect_timeout(Duration::from_secs(10));
     Ok(config)
@@ -88,17 +108,37 @@ fn run() -> Result<()> {
         }
         _ => return Err("Usage: wgrc-relayer process-deposit TXID | watch-gridcoin START_HEIGHT [--once]".into()),
     };
-    let reserve = env::var("WGRC_TESTNET_RESERVE_ADDRESS")?;
+    let bridge_config = match fs::read(DEV_CONFIG) {
+        Ok(content) => Some(content),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(format!("Cannot read {DEV_CONFIG}: {error}").into()),
+    };
+    let settings: BridgeSettings = match bridge_config.as_deref() {
+        Some(content) => serde_json::from_slice(content)
+            .map_err(|_| format!("Invalid bridge settings in {DEV_CONFIG}."))?,
+        None => BridgeSettings::default(),
+    };
+    let defaults: BridgeSettings = serde_json::from_str(include_str!("../bridge.dev.example.json"))?;
+    let reserve = env::var("WGRC_TESTNET_RESERVE_ADDRESS")
+        .ok()
+        .filter(|address| !address.is_empty())
+        .or_else(|| env::var("GRC_RESERVE_ADDRESS").ok().filter(|address| !address.is_empty()))
+        .or(settings.gridcoin_deposit_address)
+        .or(defaults.gridcoin_deposit_address)
+        .ok_or("Missing Gridcoin deposit address")?;
     let minimum = env::var("WGRC_MIN_CONFIRMATIONS")
         .unwrap_or_else(|_| include_str!("../gridcoin-min-confirmations.txt").trim().into());
-    let mut db = database_config()?.connect(MakeTlsConnector::new(TlsConnector::new()?))?;
+    let mut db = database_config(bridge_config.as_deref())?
+        .connect(MakeTlsConnector::new(TlsConnector::new()?))?;
     if let Some((height, once)) = watch_start {
         return gridcoin_watcher::watch(&mut db, &reserve, &minimum, height, once);
     }
-    process_deposit(&mut db, &reserve, &minimum, &args[1])
+    let mint = settings.wgrc_mint_address.or(defaults.wgrc_mint_address)
+        .ok_or("Missing wGRC mint address")?;
+    process_deposit(&mut db, &reserve, &minimum, &args[1], &mint)
 }
 
-fn process_deposit(db: &mut Client, reserve: &str, minimum: &str, txid: &str) -> Result<()> {
+fn process_deposit(db: &mut Client, reserve: &str, minimum: &str, txid: &str, mint: &str) -> Result<()> {
     let deposit: Deposit = node(
         "scripts/gridcoin-deposit.cjs",
         &["check", reserve, txid, minimum],
@@ -134,7 +174,7 @@ fn process_deposit(db: &mut Client, reserve: &str, minimum: &str, txid: &str) ->
     let mode = if locked.get::<_, bool>(1) { "verify" } else { "mint" };
     let mint: Mint = node(
         "relayer/mint-devnet.cjs",
-        &[mode, reserve, minimum, &serde_json::to_string(&deposit)?],
+        &[mode, reserve, minimum, &serde_json::to_string(&deposit)?, mint],
     )?;
     let result = transaction.query_opt(
         "UPDATE wgrc.deposits

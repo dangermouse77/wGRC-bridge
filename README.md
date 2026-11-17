@@ -525,11 +525,15 @@ receipt in `wgrcbridge_dev` on `pg-dsc`. Reprocessing the deposit returned the
 same receipt and mint signature without minting again. The
 [deposit pilot runbook](runbooks/relayer-devnet.md) covers setup and verification.
 
+The live Gridcoin watcher found the 1 GRC deposit to the dedicated Testnet
+reserve at height 3339204 and recorded it once in PostgreSQL. A second run
+resumed from its checkpoint and scanned only the two newly eligible blocks.
+
 - [x] Implement the Rust relayer command for a single deposit.
 - [x] Create the PostgreSQL deposit schema and migration.
 - [x] Verify deposit-backed Devnet minting and replay protection.
 - [x] Implement Gridcoin Testnet deposit discovery with PostgreSQL checkpoints.
-- [ ] Verify the Gridcoin watcher against the live Testnet node.
+- [x] Verify the Gridcoin watcher against the live Testnet node.
 - [ ] Implement Solana watcher.
 - [ ] Connect deposit discovery to automatic mint processing.
 - [ ] Implement redemption processing.

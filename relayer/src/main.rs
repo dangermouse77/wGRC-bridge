@@ -20,6 +20,7 @@ struct BridgeSettings {
 #[derive(Deserialize)]
 struct DatabaseSettings {
     host: String,
+    port: Option<u16>,
     database: String,
     username: String,
     password: String,
@@ -40,11 +41,12 @@ fn database_config(bridge_config: Option<&[u8]>) -> Result<Config> {
                 }
             };
             let settings: DatabaseSettings = serde_json::from_slice(content).map_err(|_| {
-                format!("Invalid {path}. Expected host, database, username, and password.")
+                format!("Invalid {path}. Expected host, database, username, password, and an optional numeric port.")
             })?;
             let mut config = Config::new();
             config
                 .host(&settings.host)
+                .port(settings.port.unwrap_or(5432))
                 .dbname(&settings.database)
                 .user(&settings.username)
                 .password(settings.password.as_bytes());

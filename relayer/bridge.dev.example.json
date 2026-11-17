@@ -1,5 +1,6 @@
 {
   "host": "pg-bridge",
+  "port": 5432,
   "database": "d_wgrcbridge_dev",
   "username": "wgrcbridge_dev",
   "password": "replace-with-dev-password",

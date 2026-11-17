@@ -17,7 +17,8 @@ For an existing setup, rename `relayer/database.dev.json` to
 `relayer/bridge.dev.json` and copy the three public address fields from the
 example. The relayer still accepts the old file for database credentials if
 the new file is absent. An exported `DATABASE_URL` overrides the database
-connection fields. `WGRC_TESTNET_RESERVE_ADDRESS` or `GRC_RESERVE_ADDRESS`
+connection fields. The JSON `port` defaults to `5432` when omitted.
+`WGRC_TESTNET_RESERVE_ADDRESS` or `GRC_RESERVE_ADDRESS`
 can override the configured deposit address.
 
 The development example includes the current Gridcoin Testnet deposit

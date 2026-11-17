@@ -529,13 +529,17 @@ The live Gridcoin watcher found the 1 GRC deposit to the dedicated Testnet
 reserve at height 3339204 and recorded it once in PostgreSQL. A second run
 resumed from its checkpoint and scanned only the two newly eligible blocks.
 
+The live Solana watcher recorded three finalized Devnet escrow withdrawals
+at slot 523320940. A second run advanced the PostgreSQL checkpoint to slot
+523321721 and observed the same three withdrawals with zero changes.
+
 - [x] Implement the Rust relayer command for a single deposit.
 - [x] Create the PostgreSQL deposit schema and migration.
 - [x] Verify deposit-backed Devnet minting and replay protection.
 - [x] Implement Gridcoin Testnet deposit discovery with PostgreSQL checkpoints.
 - [x] Verify the Gridcoin watcher against the live Testnet node.
 - [x] Implement finalized Solana Devnet withdrawal discovery with PostgreSQL checkpoints.
-- [ ] Verify the Solana watcher against live Devnet withdrawals.
+- [x] Verify the Solana watcher against live Devnet withdrawals.
 - [ ] Connect deposit discovery to automatic mint processing.
 - [ ] Implement redemption processing.
 - [ ] Implement automatic retries and recovery for the relayer.

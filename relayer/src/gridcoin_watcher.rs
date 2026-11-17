@@ -1,4 +1,4 @@
-use crate::{node, Result};
+use crate::{node, process_deposit, Result};
 use postgres::Client;
 use serde::Deserialize;
 use std::{thread, time::Duration};
@@ -31,16 +31,47 @@ pub fn watch(
     minimum: &str,
     start: i64,
     once: bool,
+    mint: Option<&str>,
 ) -> Result<()> {
     loop {
         if scan_next(db, reserve, minimum, start)? {
             continue;
+        }
+        if let Some(mint) = mint {
+            let failures = mint_discoveries(db, reserve, minimum, mint)?;
+            if once && failures != 0 {
+                return Err(format!("{failures} discovered deposits could not be minted or recovered.").into());
+            }
         }
         if once {
             return Ok(());
         }
         thread::sleep(Duration::from_secs(15));
     }
+}
+
+fn mint_discoveries(db: &mut Client, reserve: &str, minimum: &str, mint: &str) -> Result<usize> {
+    let discoveries = db.query(
+        "SELECT discovery.txid, discovery.deposit_id, block.block_hash
+         FROM wgrc.gridcoin_deposit_discoveries AS discovery
+         JOIN wgrc.gridcoin_blocks AS block
+           ON block.reserve_address = discovery.reserve_address AND block.height = discovery.block_height
+         LEFT JOIN wgrc.deposits AS mint ON mint.deposit_id = discovery.deposit_id
+         WHERE discovery.reserve_address = $1 AND mint.finalized_at IS NULL
+         ORDER BY discovery.block_height, discovery.txid",
+        &[&reserve],
+    )?;
+    let mut failures = 0;
+    for row in discoveries {
+        let txid: &str = row.get(0);
+        let deposit_id: &str = row.get(1);
+        let block_hash: &str = row.get(2);
+        if let Err(error) = process_deposit(db, reserve, minimum, txid, mint, Some((deposit_id, block_hash))) {
+            failures += 1;
+            eprintln!("Automatic mint for {txid} remains pending: {error}");
+        }
+    }
+    Ok(failures)
 }
 
 fn scan_next(db: &mut Client, reserve: &str, minimum: &str, start: i64) -> Result<bool> {

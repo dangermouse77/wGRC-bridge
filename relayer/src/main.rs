@@ -97,7 +97,7 @@ fn node<T: DeserializeOwned>(script: &str, args: &[&str]) -> Result<T> {
 
 enum Action<'a> {
     ProcessDeposit(&'a str),
-    WatchGridcoin { height: i64, once: bool },
+    WatchGridcoin { height: i64, once: bool, mint: bool },
     WatchSolana { once: bool },
 }
 
@@ -108,12 +108,18 @@ fn run() -> Result<()> {
             if command == "process-deposit"
                 && txid.len() == 64
                 && txid.bytes().all(|byte| byte.is_ascii_hexdigit()) => Action::ProcessDeposit(txid),
-        [command, height, flags @ ..]
-            if command == "watch-gridcoin"
-                && (flags.is_empty() || (flags.len() == 1 && flags[0] == "--once")) =>
-        {
+        [command, height, flags @ ..] if command == "watch-gridcoin" => {
             let height: u32 = height.parse().map_err(|_| "Expected a nonnegative block height")?;
-            Action::WatchGridcoin { height: i64::from(height), once: !flags.is_empty() }
+            let mut once = false;
+            let mut mint = false;
+            for flag in flags {
+                match flag.as_str() {
+                    "--once" if !once => once = true,
+                    "--mint" if !mint => mint = true,
+                    _ => return Err(format!("Unexpected watch-gridcoin option: {flag}").into()),
+                }
+            }
+            Action::WatchGridcoin { height: i64::from(height), once, mint }
         }
         [command, flags @ ..]
             if command == "watch-solana"
@@ -121,7 +127,7 @@ fn run() -> Result<()> {
         {
             Action::WatchSolana { once: !flags.is_empty() }
         }
-        _ => return Err("Usage: wgrc-relayer process-deposit TXID | watch-gridcoin START_HEIGHT [--once] | watch-solana [--once]".into()),
+        _ => return Err("Usage: wgrc-relayer process-deposit TXID | watch-gridcoin START_HEIGHT [--once] [--mint] | watch-solana [--once]".into()),
     };
     let bridge_config = match fs::read(DEV_CONFIG) {
         Ok(content) => Some(content),
@@ -149,23 +155,41 @@ fn run() -> Result<()> {
     let minimum = env::var("WGRC_MIN_CONFIRMATIONS")
         .unwrap_or_else(|_| include_str!("../gridcoin-min-confirmations.txt").trim().into());
     match action {
-        Action::WatchGridcoin { height, once } => {
-            gridcoin_watcher::watch(&mut db, &reserve, &minimum, height, once)
+        Action::WatchGridcoin { height, once, mint } => {
+            let mint_address = settings.wgrc_mint_address.or(defaults.wgrc_mint_address);
+            let automatic_mint = if mint {
+                Some(mint_address.as_deref().ok_or("Missing wGRC mint address")?)
+            } else {
+                None
+            };
+            gridcoin_watcher::watch(&mut db, &reserve, &minimum, height, once, automatic_mint)
         }
         Action::ProcessDeposit(txid) => {
             let mint = settings.wgrc_mint_address.or(defaults.wgrc_mint_address)
                 .ok_or("Missing wGRC mint address")?;
-            process_deposit(&mut db, &reserve, &minimum, txid, &mint)
+            process_deposit(&mut db, &reserve, &minimum, txid, &mint, None)
         }
         Action::WatchSolana { .. } => unreachable!("Solana watcher handled above"),
     }
 }
 
-fn process_deposit(db: &mut Client, reserve: &str, minimum: &str, txid: &str, mint: &str) -> Result<()> {
+fn process_deposit(
+    db: &mut Client,
+    reserve: &str,
+    minimum: &str,
+    txid: &str,
+    mint: &str,
+    discovery: Option<(&str, &str)>,
+) -> Result<()> {
     let deposit: Deposit = node(
         "scripts/gridcoin-deposit.cjs",
         &["check", reserve, txid, minimum],
     )?;
+    if let Some((deposit_id, block_hash)) = discovery {
+        if deposit.deposit_id != deposit_id || deposit.blockhash != block_hash {
+            return Err("Gridcoin deposit differs from its saved discovery. Wait for the watcher to recheck the chain.".into());
+        }
+    }
     let vout = i64::from(deposit.vout);
     // Commit the original block before touching Solana. A pending row may
     // already have an on-chain mint if the previous run lost its RPC response.
@@ -195,9 +219,10 @@ fn process_deposit(db: &mut Client, reserve: &str, minimum: &str, txid: &str, mi
         return Err("Deposit block changed during processing. Revalidate before retrying.".into());
     }
     let mode = if locked.get::<_, bool>(1) { "verify" } else { "mint" };
+    let backing_check = if discovery.is_some() { "unspent" } else { "confirmed" };
     let mint: Mint = node(
         "relayer/mint-devnet.cjs",
-        &[mode, reserve, minimum, &serde_json::to_string(&deposit)?, mint],
+        &[mode, reserve, minimum, &serde_json::to_string(&deposit)?, mint, backing_check],
     )?;
     let result = transaction.query_opt(
         "UPDATE wgrc.deposits

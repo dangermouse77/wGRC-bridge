@@ -93,6 +93,50 @@ signature is unavailable. If the deposit is reported in a different Gridcoin
 block, reconcile the deposit and the Solana receipt before changing its
 database record.
 
+## Process discoveries automatically
+
+Use the watcher start height already recorded for the configured reserve.
+If you have never scanned that reserve, choose a start height that covers
+the deposits you intend to process. The watcher processes all unfinished
+discoveries for that reserve once it catches up, including discoveries saved
+by earlier runs. The existing watcher tables support this mode.
+
+On `solchain`, point Gridcoin RPC at the dedicated Testnet reserve wallet.
+Use the same Solana Devnet URL and mint operator keypair as for
+`process-deposit`. For a one-shot pilot at the existing Testnet reserve:
+
+```bash
+export ANCHOR_PROVIDER_URL=https://api.devnet.solana.com
+export ANCHOR_WALLET='<absolute path to the Devnet mint operator keypair>'
+cargo run -p wgrc-relayer -- watch-gridcoin 3339204 --once --mint
+```
+
+Before submitting a new mint, the relayer rechecks the transaction's
+active-chain confirmations and requires the reserve wallet to report the
+exact deposit output as spendable and unspent. The finalized on-chain
+receipt prevents duplicates and lets the relayer recover an earlier mint
+whose result was interrupted before the database update. Finalized rows
+are skipped on subsequent automatic passes. A failed deposit remains
+eligible for retry, and the watcher continues processing other discoveries.
+With `--once`, any failed deposits are reported through a nonzero exit.
+Omit `--once` to keep scanning and retrying on subsequent polls.
+Without `--mint`, the watcher records discoveries as before.
+
+For live verification, use a confirmed and unspent deposit with no prior
+mint. After the first run, confirm that the discovery has one finalized
+mint row with the expected amount and recipient:
+
+```sql
+SELECT d.txid, d.deposit_id, m.amount_base_units, m.recipient,
+       m.receipt_address, m.mint_signature, m.finalized_at
+FROM wgrc.gridcoin_deposit_discoveries AS d
+LEFT JOIN wgrc.deposits AS m USING (deposit_id)
+WHERE d.txid = '<test deposit txid>';
+```
+
+Rerun with the same arguments and verify that the receipt, signature,
+and finalized timestamp are unchanged.
+
 ## Watch Solana Devnet for withdrawals
 
 Apply migration `003` once to the development database from the repository

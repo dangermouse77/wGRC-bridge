@@ -540,7 +540,8 @@ at slot 523320940. A second run advanced the PostgreSQL checkpoint to slot
 - [x] Verify the Gridcoin watcher against the live Testnet node.
 - [x] Implement finalized Solana Devnet withdrawal discovery with PostgreSQL checkpoints.
 - [x] Verify the Solana watcher against live Devnet withdrawals.
-- [ ] Connect deposit discovery to automatic mint processing.
+- [x] Connect Gridcoin deposit discovery to automatic Devnet mint processing.
+- [ ] Verify automatic mint processing and replay protection on Devnet.
 - [ ] Implement redemption processing.
 - [ ] Implement automatic retries and recovery for the relayer.
 - [ ] Implement reserve reconciliation.

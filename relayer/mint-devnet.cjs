@@ -15,7 +15,7 @@ const PROGRAM_ID = "AvqkRykFXfx31fDYnJq7kPkNpgiMA6LbknavHMvjz3Zy";
 const run = promisify(execFile);
 
 async function main() {
-  const [mode, reserve, minimum, input, expectedMint] = process.argv.slice(2);
+  const [mode, reserve, minimum, input, expectedMint, backingCheck] = process.argv.slice(2);
   assert.ok(mode === "mint" || mode === "verify", "Expected mint or verify mode.");
   assert.equal(process.env.ANCHOR_PROVIDER_URL, DEVNET_URL, "Set the Solana Devnet RPC URL.");
   const deposit = JSON.parse(input);
@@ -74,7 +74,8 @@ async function main() {
 
     // Reuse the exact-amount active-chain validator before broadcasting.
     const { stdout } = await run(process.execPath, [
-      "scripts/gridcoin-deposit.cjs", "check", reserve, deposit.txid, minimum,
+      "scripts/gridcoin-deposit.cjs", backingCheck === "unspent" ? "check-unspent" : "check",
+      reserve, deposit.txid, minimum,
     ]);
     const current = JSON.parse(stdout);
     for (const field of ["txid", "vout", "depositId", "recipient", "amountBaseUnits", "blockhash"]) {

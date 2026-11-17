@@ -143,10 +143,10 @@ async function main() {
   const [command, reserveAddress, value, extra, ...rest] = process.argv.slice(2);
   const broadcast = command === "broadcast";
   if (!reserveAddress || !value || (broadcast ? extra !== undefined : !extra) || rest.length
-      || !["create", "send", "broadcast", "check"].includes(command)) {
+      || !["create", "send", "broadcast", "check", "check-unspent"].includes(command)) {
     throw new Error("Usage: gridcoin-deposit.cjs create|send RESERVE GRC SOLANA_RECIPIENT\n"
       + "       gridcoin-deposit.cjs broadcast RESERVE DEPOSIT_JSON_FILE\n"
-      + "       gridcoin-deposit.cjs check RESERVE TXID MIN_CONFIRMATIONS");
+      + "       gridcoin-deposit.cjs check|check-unspent RESERVE TXID MIN_CONFIRMATIONS");
   }
   const prepared = broadcast ? JSON.parse(readFileSync(value, "utf8")) : null;
   if (broadcast && (typeof prepared?.signedHex !== "string"
@@ -173,7 +173,7 @@ async function main() {
     return;
   }
 
-  if (command === "check") {
+  if (command === "check" || command === "check-unspent") {
     const minimum = Number(extra);
     if (!/^[a-fA-F0-9]{64}$/.test(value) || !/^\d+$/.test(extra)
         || !Number.isSafeInteger(minimum) || minimum < 1) {
@@ -188,7 +188,18 @@ async function main() {
       );
     });
     if (tx.txid !== value.toLowerCase()) throw new Error("Gridcoin RPC returned a different transaction.");
-    console.log(JSON.stringify(confirmedDeposit(tx, script, minimum), null, 2));
+    const record = confirmedDeposit(tx, script, minimum);
+    if (command === "check-unspent") {
+      if (address.ismine !== true) {
+        throw new Error("Automatic minting requires RPC access to the Testnet reserve wallet.");
+      }
+      const outputs = await rpc("listunspent", minimum, 9999999, [address.address]);
+      if (!Array.isArray(outputs) || !outputs.some((out) =>
+        out.txid === record.txid && out.vout === record.vout && out.spendable !== false)) {
+        throw new Error(`Reserve wallet does not list ${record.txid}:${record.vout} as spendable and unspent.`);
+      }
+    }
+    console.log(JSON.stringify(record, null, 2));
     return;
   }
 

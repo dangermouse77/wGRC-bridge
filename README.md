@@ -533,6 +533,10 @@ The live Solana watcher recorded three finalized Devnet escrow withdrawals
 at slot 523320940. A second run advanced the PostgreSQL checkpoint to slot
 523321721 and observed the same three withdrawals with zero changes.
 
+The Gridcoin watcher discovered a confirmed 2 GRC deposit in Testnet block
+3340013 and automatically minted 2 wGRC on Solana Devnet. A second run skipped
+the finalized deposit without submitting another mint.
+
 - [x] Implement the Rust relayer command for a single deposit.
 - [x] Create the PostgreSQL deposit schema and migration.
 - [x] Verify deposit-backed Devnet minting and replay protection.
@@ -541,7 +545,7 @@ at slot 523320940. A second run advanced the PostgreSQL checkpoint to slot
 - [x] Implement finalized Solana Devnet withdrawal discovery with PostgreSQL checkpoints.
 - [x] Verify the Solana watcher against live Devnet withdrawals.
 - [x] Connect Gridcoin deposit discovery to automatic Devnet mint processing.
-- [ ] Verify automatic mint processing and replay protection on Devnet.
+- [x] Verify automatic mint processing and replay protection on Devnet.
 - [ ] Implement redemption processing.
 - [ ] Implement automatic retries and recovery for the relayer.
 - [ ] Implement reserve reconciliation.

@@ -292,6 +292,10 @@ export ANCHOR_PROVIDER_URL=https://api.devnet.solana.com
 cargo run -p wgrc-relayer -- reconcile-reserve
 ```
 
+For a four-line summary in GRC and wGRC, run
+`./bin/reserve_reconciliation_report.sh --summary`. Run the same script
+without the option for the detailed JSON report and its issue list.
+
 The report shows wallet-reported unspent outputs for the configured reserve
 script that meet the shared confirmation threshold, and how much of that
 balance the wallet reports as spendable. Wallet restrictions or immature

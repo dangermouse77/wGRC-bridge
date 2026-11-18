@@ -208,7 +208,7 @@ the escrow accounts.
 ```bash
 export ANCHOR_PROVIDER_URL=https://api.devnet.solana.com
 export ANCHOR_WALLET='<absolute path to the Devnet holder keypair>'
-node scripts/request-devnet-withdrawal.cjs '<Testnet payout address>' 1
+./bin/request_devnet_withdrawal.sh '<Testnet payout address>' 1
 ./bin/verify_solana_watcher.sh
 ```
 

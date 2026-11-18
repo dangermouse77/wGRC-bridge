@@ -177,7 +177,7 @@ async function main() {
   console.log(JSON.stringify(result));
 }
 
-module.exports = { preparePayout, advancePayout };
+module.exports = { preparePayout, advancePayout, findPayout, validateOutputs };
 if (require.main === module) {
   main().catch((error) => {
     console.error(error.message);

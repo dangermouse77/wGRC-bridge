@@ -443,6 +443,8 @@ Total wGRC supply
 Pending escrow is included in SPL supply and counts once. Track and reconcile
 confirmed payouts awaiting settlement against their specific escrow records.
 Any reserve assets committed to other obligations must be excluded from available backing.
+The [Testnet reconciliation report](runbooks/relayer-devnet.md#reconcile-the-reserve)
+also counts escrow settlements without a verifiable payout as unresolved obligations.
 
 ### Gridcoin Staking
 
@@ -560,7 +562,8 @@ settled the Devnet escrow automatically at 10 confirmations.
 - [x] Verify the full redemption flow on Gridcoin Testnet and Solana Devnet.
 - [x] Implement automatic retries and recovery for unfinished redemption payouts.
 - [x] Verify redemption recovery after interrupting and restarting the worker.
-- [ ] Implement reserve reconciliation.
+- [x] Implement a read-only reserve reconciliation report.
+- [ ] Verify reserve reconciliation against the live Testnet reserve and Devnet mint.
 
 ### Phase 4 — CLI and Integration Testing
 

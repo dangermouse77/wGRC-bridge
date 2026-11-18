@@ -280,6 +280,39 @@ worker reports `settled` with the same transaction ID and that PostgreSQL
 contains one payout row for that withdrawal. Run a final `--once` pass and
 expect `No unfinished payout for the configured reserve.`
 
+## Reconcile the reserve
+
+Run from the repository root on `solchain` with the development database
+configuration, the Gridcoin Testnet reserve wallet loaded, and its RPC
+credentials exported. The report uses the public Devnet RPC and the
+generated Anchor IDL. It needs no Solana signing wallet or new migration.
+
+```bash
+export ANCHOR_PROVIDER_URL=https://api.devnet.solana.com
+cargo run -p wgrc-relayer -- reconcile-reserve
+```
+
+The report shows wallet-reported unspent outputs for the configured reserve
+script that meet the shared confirmation threshold, and how much of that
+balance the wallet reports as spendable. Wallet restrictions or immature
+outputs can make this a conservative view of the reserve. Amounts are
+integer strings in base units. Divide by 100000000 to get GRC or wGRC.
+
+Compare the report with the same reserve wallet's `listunspent` results
+and the finalized SPL supply from `bin/supply.sh`. A pending withdrawal is
+already in SPL supply. Its amount is deducted only once the report verifies
+its saved Gridcoin payout, including the destination, exact amount, reserve
+inputs, and confirmations. A verified settled withdrawal is already
+reflected in supply. The report counts unmatched settlements and legacy
+burn-first withdrawals conservatively as unresolved obligations.
+
+Check `status`, the backing and spendable shortfall fields, and `issues`.
+The early Devnet smoke tests used synthetic payout IDs. Expect those
+settlements to appear in `issues` because there are no matching relayer
+payout records. This command reports discrepancies without moving funds
+or changing relayer records. If Gridcoin advances or the mint supply
+changes during a scan, rerun the command for a fresh snapshot.
+
 ## Watch Gridcoin Testnet for deposits
 
 Apply the watcher migration once to `wgrcbridge_dev` with the database owner

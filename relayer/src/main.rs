@@ -2,11 +2,16 @@ use native_tls::TlsConnector;
 use postgres::{Client, Config};
 use postgres_native_tls::MakeTlsConnector;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use std::{env, error::Error, fs, process::Command, time::Duration};
+use std::{
+    env, error::Error, fs, io::Write,
+    process::{Command, Output, Stdio},
+    time::Duration,
+};
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
 mod gridcoin_watcher;
+mod reconciliation;
 mod redemption;
 mod solana_watcher;
 
@@ -85,11 +90,29 @@ struct Mint {
 }
 
 fn node<T: DeserializeOwned>(script: &str, args: &[&str]) -> Result<T> {
-    let output = Command::new("node")
-        .arg(script)
-        .args(args)
-        .env_remove("DATABASE_URL")
-        .output()?;
+    node_output(script, node_command(script, args).output()?)
+}
+
+fn node_command(script: &str, args: &[&str]) -> Command {
+    let mut command = Command::new("node");
+    command.arg(script).args(args).env_remove("DATABASE_URL");
+    command
+}
+
+fn node_with_input<T: DeserializeOwned>(script: &str, args: &[&str], input: &[u8]) -> Result<T> {
+    let mut child = node_command(script, args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    let written = child.stdin.take().expect("stdin was piped").write_all(input);
+    let output = child.wait_with_output()?;
+    let result = node_output(script, output)?;
+    written?;
+    Ok(result)
+}
+
+fn node_output<T: DeserializeOwned>(script: &str, output: Output) -> Result<T> {
     if !output.status.success() {
         return Err(format!("{script}: {}", String::from_utf8_lossy(&output.stderr).trim()).into());
     }
@@ -100,6 +123,7 @@ enum Action<'a> {
     ProcessDeposit(&'a str),
     ProcessRedemption(&'a str),
     RecoverRedemptions { once: bool },
+    ReconcileReserve,
     WatchGridcoin { height: i64, once: bool, mint: bool },
     WatchSolana { once: bool },
 }
@@ -112,6 +136,7 @@ fn run() -> Result<()> {
                 && txid.len() == 64
                 && txid.bytes().all(|byte| byte.is_ascii_hexdigit()) => Action::ProcessDeposit(txid),
         [command, address] if command == "process-redemption" => Action::ProcessRedemption(address),
+        [command] if command == "reconcile-reserve" => Action::ReconcileReserve,
         [command, flags @ ..]
             if command == "recover-redemptions"
                 && (flags.is_empty() || (flags.len() == 1 && flags[0] == "--once")) =>
@@ -137,7 +162,7 @@ fn run() -> Result<()> {
         {
             Action::WatchSolana { once: !flags.is_empty() }
         }
-        _ => return Err("Usage: wgrc-relayer process-deposit TXID | process-redemption WITHDRAWAL_ADDRESS | recover-redemptions [--once] | watch-gridcoin START_HEIGHT [--once] [--mint] | watch-solana [--once]".into()),
+        _ => return Err("Usage: wgrc-relayer process-deposit TXID | process-redemption WITHDRAWAL_ADDRESS | recover-redemptions [--once] | reconcile-reserve | watch-gridcoin START_HEIGHT [--once] [--mint] | watch-solana [--once]".into()),
     };
     let bridge_config = match fs::read(DEV_CONFIG) {
         Ok(content) => Some(content),
@@ -190,6 +215,11 @@ fn run() -> Result<()> {
             let mint = settings.wgrc_mint_address.or(defaults.wgrc_mint_address)
                 .ok_or("Missing wGRC mint address")?;
             redemption::recover(connect, &reserve, &minimum, &mint, once)
+        }
+        Action::ReconcileReserve => {
+            let mint = settings.wgrc_mint_address.or(defaults.wgrc_mint_address)
+                .ok_or("Missing wGRC mint address")?;
+            reconciliation::report(&mut connect()?, &reserve, &minimum, &mint)
         }
         Action::WatchSolana { .. } => unreachable!("Solana watcher handled above"),
     }

@@ -723,7 +723,28 @@ overlapping mint completion, and failed source lookups. Live mixed-flow
 verification remains outstanding. Deposit input protection itself requires no
 migration; cancellation coordination requires migration 005 above.
 
+Live sequential CLI verification on Gridcoin Testnet and Solana Devnet passed
+on 2026-11-18 with the daemon stopped and processing invoked manually:
+
+- `wgrc deposit` submitted 77 GRC. Validation rejected 7 and 9 confirmations,
+  accepted 10, and `process-deposit` minted 77 wGRC, increasing outstanding
+  supply from 6 to 83 wGRC. The pending-deposit report showed 77 GRC before
+  minting and zero afterward.
+- `wgrc withdraw` escrowed 1 wGRC. Repeated `process-redemption` calls tracked
+  the same Gridcoin payout through 0, 1, 4, 6, and 7 confirmations and settled
+  at 11 confirmations. Settlement burned 1 wGRC, leaving 82 wGRC outstanding.
+  The Solana watcher observed settlement, and pending escrow, deposits, and
+  payouts all returned to zero in the supply report.
+- A separate deposit replay returned the original receipt and signature
+  without changing the 6 wGRC supply at that time.
+
+These results verify both sequential CLI flows and the live pending reports.
+They do not yet verify unattended service operation, concurrent requests,
+cancellation/payout races, or the new worker timeout behavior under live faults.
+
 - [x] Implement initial unified `wgrc` operator CLI.
+- [x] Implement user-facing `deposit`, `withdraw`, `status`, and `supply` commands.
+- [x] Verify pending-deposit and pending-payout supply reports live.
 - [x] Implement a service runner and systemd template with opt-in queued payouts.
 - [x] Coordinate relayer cancellation with payouts using durable cancellation intent.
 - [x] Bound worker execution and database lock waits.
@@ -731,8 +752,8 @@ migration; cancellation coordination requires migration 005 above.
 - [ ] Run the whole bridge as a supervised service on `solchain`, coordinating discovery, minting, queued payouts, recovery, and periodic reconciliation with graceful shutdown and restart.
 - [x] Protect unminted deposit outputs from relayer payout input selection, including deposits not yet discovered by the watcher.
 - [ ] Verify overlapping deposits and withdrawals live, including worker restarts and duplicate prevention, before enabling automatic payout initiation.
-- [ ] Test complete Gridcoin-to-Solana flow.
-- [ ] Test complete Solana-to-Gridcoin flow.
+- [x] Test complete Gridcoin-to-Solana CLI flow with sequential manual processing.
+- [x] Test complete Solana-to-Gridcoin CLI flow with sequential manual processing.
 - [ ] Test failures, restarts, and duplicate prevention.
 - [ ] Publish operational documentation.
 

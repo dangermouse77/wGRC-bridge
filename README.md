@@ -103,27 +103,55 @@ The blockchain records remain the authoritative source for on-chain activity. Po
 
 ### 4. Command-Line Interface
 
-A unified `wgrc` CLI is planned for both deposit and withdrawal operations.
-
-Example commands (proposed interface, not yet implemented):
+A unified `wgrc` client supports deposit and withdrawal submission and read-only
+status and supply reports. From the repository root on Testnet/Devnet:
 
 ```bash
 # Deposit 1000 GRC and receive wGRC on Solana
-wgrc deposit 1000 \
+bash bin/wgrc deposit 1000 \
   --solana-address <SOLANA_ADDRESS>
 
 # Lock 500 wGRC and request native GRC
-wgrc withdraw 500 \
-  --gridcoin-address <GRIDCOIN_ADDRESS>
+bash bin/wgrc withdraw 500 --gridcoin-address <GRIDCOIN_TESTNET_ADDRESS>
 
-# Inspect bridge status
-wgrc status
+# Inspect on-chain bridge settings, supply cap, and available mint capacity
+bash bin/wgrc status
 
-# Inspect wrapped token supply
-wgrc supply
+# Inspect minted, burned, escrowed, and outstanding token supply
+bash bin/wgrc supply
 ```
 
-The CLI will interact with Gridcoin RPC and the Solana bridge program.
+`deposit` uses the active funded sending wallet's Gridcoin RPC, validates the
+Solana supply cap, creates and signs the transaction, saves it under
+`deposits/<txid>.json`, and broadcasts it. It does not wait for confirmations
+or mint immediately. The bridge daemon discovers confirmed deposits and mints
+wGRC. It also discovers withdrawals, pays GRC, and settles escrow after the
+required confirmations when payout initiation is enabled. User commands require
+Node and npm dependencies; they do not require PostgreSQL credentials or the
+compiled Rust relayer. Processing commands remain in the operator section of
+`wgrc --help` for manual testing and recovery, not normal user submission.
+
+If broadcasting fails or times out, retain the saved file and retry the same
+transaction with `bash bin/wgrc broadcast-deposit deposits/<txid>.json`.
+Do not rerun `deposit` to recover an uncertain broadcast, since that creates a
+new payment. The existing helper scripts remain available.
+
+`withdraw` uses the token owner's `ANCHOR_WALLET` to lock wGRC in escrow.
+It validates the Testnet destination through Gridcoin RPC and rejects the
+configured reserve address as the destination. It submits no GRC payout.
+Requests are saved under `withdrawals/<withdrawal-address>.json` before
+submission. If the response is uncertain, reuse the printed nonce with the
+same amount, destination, and wallet:
+`bash bin/wgrc withdraw 500 --gridcoin-address <ADDRESS> --nonce <SAVED_NONCE>`.
+An existing finalized matching request is returned without locking tokens
+again. Omitting `--nonce` creates a new request.
+
+`status` and `supply` need only Solana RPC access and the generated IDL; neither
+prompts for a password nor signs a transaction. `status` reports finalized
+bridge settings and capacity, not daemon health or proof of GRC backing.
+Operators use `reconcile-reserve` and service logs for those checks.
+
+The client interacts with Gridcoin RPC and the Solana bridge program.
 
 ## Gridcoin Deposit Protocol
 

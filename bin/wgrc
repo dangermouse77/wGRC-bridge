@@ -4,6 +4,13 @@ root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 if (( $# == 0 )) || [[ "$1" == "--help" ]]; then
   cat <<'HELP'
 Usage: bash bin/wgrc COMMAND [ARGS]
+User commands (Node.js; no relayer binary required):
+  deposit AMOUNT_GRC --solana-address ADDRESS
+  broadcast-deposit DEPOSIT_JSON_FILE   Retry the same saved transaction
+  withdraw AMOUNT_WGRC --gridcoin-address ADDRESS [--nonce NONCE]
+  status
+  supply
+Bridge operator commands (compiled Rust relayer required):
   serve START_HEIGHT [--once] [--enable-payouts]
   watch-gridcoin START_HEIGHT [--once] [--mint]
   watch-solana [--once]
@@ -18,8 +25,19 @@ Build first: cargo build --release -p wgrc-relayer
 HELP
   exit 0
 fi
+# Reject invalid user arguments before prompting for RPC credentials.
 case "$1" in
-  serve|watch-gridcoin|process-deposit|process-redemption|process-redemptions|recover-redemptions|reconcile-reserve)
+  status|supply)
+    if (( $# != 1 )); then echo "Usage: wgrc $1" >&2; exit 1; fi ;;
+  withdraw)
+    if (( $# != 4 && $# != 6 )) || [[ "$3" != --gridcoin-address ]] ||
+       { (( $# == 6 )) && [[ "$5" != --nonce ]]; }; then
+      echo 'Usage: wgrc withdraw AMOUNT_WGRC --gridcoin-address ADDRESS [--nonce NONCE]' >&2
+      exit 1
+    fi ;;
+esac
+case "$1" in
+  withdraw|deposit|broadcast-deposit|serve|watch-gridcoin|process-deposit|process-redemption|process-redemptions|recover-redemptions|reconcile-reserve)
     if [[ -z ${GRC_RPC_PASSWORD:-} && ! -t 0 ]]; then
       echo 'Set GRC_RPC_PASSWORD for noninteractive operation.' >&2
       exit 1
@@ -27,12 +45,35 @@ case "$1" in
     source "$root/bin/deposit-common.sh"
     export WGRC_TESTNET_RESERVE_ADDRESS="$reserve"
     ;;
-  watch-solana|cancel-redemption|recover-cancellations) ;;
+  status|supply|watch-solana|cancel-redemption|recover-cancellations) ;;
   *) echo 'Unknown command. Run bash bin/wgrc --help.' >&2; exit 1 ;;
 esac
 export ANCHOR_PROVIDER_URL="${ANCHOR_PROVIDER_URL:-https://api.devnet.solana.com}"
 export ANCHOR_WALLET="${ANCHOR_WALLET:-$HOME/.config/solana/devnet.json}"
 cd -- "$root"
+case "$1" in
+  status) exec node scripts/bridge-status.cjs ;;
+  supply) exec node scripts/supply.cjs ;;
+  withdraw)
+    if [[ "$4" == "$reserve" ]]; then
+      echo 'Use a Gridcoin Testnet payout address outside the bridge reserve.' >&2; exit 1
+    fi
+    if (( $# == 6 )); then
+      exec node scripts/request-devnet-withdrawal.cjs "$4" "$2" --nonce "$6"
+    fi
+    exec node scripts/request-devnet-withdrawal.cjs "$4" "$2" ;;
+esac
+if [[ "$1" == deposit ]]; then
+  shift
+  exec node scripts/client-deposit.cjs "$@"
+fi
+if [[ "$1" == broadcast-deposit ]]; then
+  if (( $# != 2 )); then
+    echo 'Usage: wgrc broadcast-deposit DEPOSIT_JSON_FILE' >&2
+    exit 1
+  fi
+  exec node scripts/gridcoin-deposit.cjs broadcast "$reserve" "$2"
+fi
 export WGRC_RELAYER_BIN="${WGRC_RELAYER_BIN:-$root/target/release/wgrc-relayer}"
 if [[ ! -x "$WGRC_RELAYER_BIN" ]]; then
   echo 'Relayer binary missing. Run cargo build --release -p wgrc-relayer.' >&2

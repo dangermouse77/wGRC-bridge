@@ -32,11 +32,15 @@ function client() {
 async function readLimit() {
   const { unpackMint } = require("@solana/spl-token");
   const { connection, program, bridge, mint, supplyLimit } = client();
-  const [settings, limit, token] = await connection.getMultipleAccountsInfo([bridge, supplyLimit, mint], "finalized");
+  const snapshot = await connection.getMultipleAccountsInfoAndContext([bridge, supplyLimit, mint], "finalized");
+  const [settings, limit, token] = snapshot.value;
   assert.ok(settings && limit && token, "Supply cap is not initialized. Do not send a deposit; ask the bridge admin to initialize it.");
   assert.ok(settings.owner.equals(program.programId) && limit.owner.equals(program.programId));
   const state = program.coder.accounts.decode("bridge", settings.data);
-  return { paused: state.paused, supply: unpackMint(mint, token).supply,
+  return { slot: snapshot.context.slot, program: program.programId.toBase58(),
+    bridge: bridge.toBase58(), mint: mint.toBase58(), supplyLimit: supplyLimit.toBase58(),
+    admin: state.admin.toBase58(), mintOperator: state.mintOperator.toBase58(),
+    paused: state.paused, supply: unpackMint(mint, token).supply,
     maximum: BigInt(program.coder.accounts.decode("supplyLimit", limit.data).maxSupply.toString()) };
 }
 
@@ -69,5 +73,5 @@ async function main() {
   console.log(JSON.stringify({ signature: await instruction.rpc() }));
 }
 
-module.exports = { parseAmount, checkCapacity, assertDepositCapacity };
+module.exports = { parseAmount, checkCapacity, assertDepositCapacity, readLimit };
 if (require.main === module) main().catch((error) => { console.error(error.message); process.exitCode = 1; });

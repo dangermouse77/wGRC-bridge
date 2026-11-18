@@ -549,6 +549,12 @@ The recovery worker was stopped while a live payout had 8 Gridcoin
 confirmations. After restart it resumed the saved payout transaction and
 settled the Devnet escrow automatically at 10 confirmations.
 
+Live reserve reconciliation reported 30,000.998 confirmed and spendable GRC
+against 1 wGRC in finalized Devnet supply. The report included four
+unresolved historical base units in required backing of 1.00000004 GRC
+and found no backing or spendable shortfall. The summary displayed the same
+figures as the detailed report.
+
 - [x] Implement the Rust relayer command for a single deposit.
 - [x] Create the PostgreSQL deposit schema and migration.
 - [x] Verify deposit-backed Devnet minting and replay protection.
@@ -563,7 +569,7 @@ settled the Devnet escrow automatically at 10 confirmations.
 - [x] Implement automatic retries and recovery for unfinished redemption payouts.
 - [x] Verify redemption recovery after interrupting and restarting the worker.
 - [x] Implement a read-only reserve reconciliation report.
-- [ ] Verify reserve reconciliation against the live Testnet reserve and Devnet mint.
+- [x] Verify reserve reconciliation against the live Testnet reserve and Devnet mint.
 
 ### Phase 4 — CLI and Integration Testing
 

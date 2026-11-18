@@ -59,6 +59,11 @@ test("mints wGRC once per deposit ID, locks and settles withdrawals, and refunds
   assert.ok(settings.admin.equals(admin));
   assert.ok(settings.mintOperator.equals(operator.publicKey));
   assert.equal(settings.paused, false);
+  const supplyLimit = pda("supply_limit");
+  await program.methods.initializeSupplyLimit().accountsStrict({
+    admin, bridge, mint, supplyLimit, systemProgram: SystemProgram.programId,
+  }).rpc();
+  assert.equal((await program.account.supplyLimit.fetch(supplyLimit)).maxSupply.toString(), "200000000000000");
 
   const setup = new Transaction();
   for (const signer of [operator, holder]) {
@@ -83,13 +88,14 @@ test("mints wGRC once per deposit ID, locks and settles withdrawals, and refunds
   const receiptAddress = pda("deposit", depositId);
   const mintAmount = 300_000_000;
 
-  function mintDeposit(signer, amount) {
-    return program.methods.mintDeposit([...depositId], new BN(amount)).accountsStrict({
+  function mintDeposit(signer, amount, id = depositId) {
+    return program.methods.mintDeposit([...id], new BN(amount)).accountsStrict({
       ...commonAccounts,
+      supplyLimit,
       mintOperator: signer.publicKey,
       recipient: holder.publicKey,
       recipientTokens: tokenAccount,
-      depositReceipt: receiptAddress,
+      depositReceipt: pda("deposit", id),
     }).signers([signer]).rpc();
   }
 
@@ -97,12 +103,27 @@ test("mints wGRC once per deposit ID, locks and settles withdrawals, and refunds
   assert.equal(await connection.getAccountInfo(receiptAddress, "confirmed"), null);
   await assertSupplyAndBalance(0n);
 
+  await assert.rejects(program.methods.setMaxSupply(new BN(mintAmount)).accountsStrict({
+    admin: operator.publicKey, bridge, mint, supplyLimit,
+  }).signers([operator]).rpc(), /Error Code: Unauthorized\b/);
+  const setCap = (amount) => program.methods.setMaxSupply(new BN(amount))
+    .accountsStrict({ admin, bridge, mint, supplyLimit }).rpc();
+  await setCap(mintAmount - 1);
+  await assert.rejects(mintDeposit(operator, mintAmount), /Error Code: SupplyCapExceeded\b/);
+  assert.equal(await connection.getAccountInfo(receiptAddress, "confirmed"), null);
+  await assertSupplyAndBalance(0n);
+  await setCap(mintAmount);
+
   await mintDeposit(operator, mintAmount);
   const receipt = await program.account.depositReceipt.fetch(receiptAddress, "confirmed");
   assert.deepEqual(Buffer.from(receipt.depositId), depositId);
   assert.ok(receipt.recipient.equals(holder.publicKey));
   assert.equal(receipt.amount.toNumber(), mintAmount);
   await assertSupplyAndBalance(BigInt(mintAmount));
+  await assert.rejects(setCap(mintAmount - 1), /Error Code: CapBelowSupply\b/);
+  const excessId = Buffer.alloc(32, 2);
+  await assert.rejects(mintDeposit(operator, 1, excessId), /Error Code: SupplyCapExceeded\b/);
+  assert.equal(await connection.getAccountInfo(pda("deposit", excessId), "confirmed"), null);
 
   // Change the amount so the replay is a distinct Solana transaction.
   await assert.rejects(mintDeposit(operator, mintAmount + 1), /already in use/i);
@@ -141,6 +162,7 @@ test("mints wGRC once per deposit ID, locks and settles withdrawals, and refunds
   assert.equal(withdrawal.gridcoinAddress, WITHDRAWAL_ADDRESS);
   assert.deepEqual(withdrawal.status, { pending: {} });
   await assertSupplyAndBalance(BigInt(mintAmount), BigInt(mintAmount - burnAmount));
+  await assert.rejects(mintDeposit(operator, 1, Buffer.alloc(32, 3)), /Error Code: SupplyCapExceeded\b/);
 
   await assert.rejects(requestWithdrawal(burnAmount + 1, WITHDRAWAL_ADDRESS), /already in use/i);
   function resolution(withdrawal, signer = operator) {
@@ -175,4 +197,14 @@ test("mints wGRC once per deposit ID, locks and settles withdrawals, and refunds
   assert.deepEqual(cancelled.status, { cancelled: {} });
   await assert.rejects(settle(cancelAddress), /Error Code: WithdrawalResolved\b/);
   await assertSupplyAndBalance(BigInt(mintAmount - burnAmount));
+  // The burn freed capacity. Two competing mints cannot both use its last unit.
+  await setCap(mintAmount - burnAmount + 1);
+  const results = await Promise.allSettled([
+    mintDeposit(operator, 1, Buffer.alloc(32, 4)),
+    mintDeposit(operator, 1, Buffer.alloc(32, 5)),
+  ]);
+  assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
+  const rejected = results.find((result) => result.status === "rejected");
+  assert.match(String(rejected.reason), /SupplyCapExceeded/);
+  await assertSupplyAndBalance(BigInt(mintAmount - burnAmount + 1));
 });

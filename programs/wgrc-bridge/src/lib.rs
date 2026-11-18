@@ -8,6 +8,7 @@ use anchor_spl::token::{self, Burn, Mint, MintTo, Token, TokenAccount, Transfer}
 declare_id!("AvqkRykFXfx31fDYnJq7kPkNpgiMA6LbknavHMvjz3Zy");
 
 const WGRC_DECIMALS: u8 = 8;
+const INITIAL_MAX_SUPPLY: u64 = 2_000_000 * 100_000_000;
 const MAX_GRIDCOIN_ADDRESS_LEN: usize = 35;
 
 #[program]
@@ -31,6 +32,9 @@ pub mod wgrc_bridge {
         amount: u64,
     ) -> Result<()> {
         require!(amount > 0, BridgeError::ZeroAmount);
+        let next_supply = ctx.accounts.mint.supply.checked_add(amount)
+            .ok_or(BridgeError::SupplyCapExceeded)?;
+        require!(next_supply <= ctx.accounts.supply_limit.max_supply, BridgeError::SupplyCapExceeded);
 
         let mint_seeds: &[&[u8]] = &[b"mint", &[ctx.bumps.mint]];
         token::mint_to(
@@ -192,6 +196,20 @@ pub mod wgrc_bridge {
         Ok(())
     }
 
+    /// Separate PDA preserves the layout of existing deployed Bridge accounts.
+    /// Minting fails closed until the administrator initializes this account.
+    pub fn initialize_supply_limit(ctx: Context<InitializeSupplyLimit>) -> Result<()> {
+        require!(ctx.accounts.mint.supply <= INITIAL_MAX_SUPPLY, BridgeError::CapBelowSupply);
+        ctx.accounts.supply_limit.max_supply = INITIAL_MAX_SUPPLY;
+        Ok(())
+    }
+
+    pub fn set_max_supply(ctx: Context<SetMaxSupply>, max_supply: u64) -> Result<()> {
+        require!(max_supply >= ctx.accounts.mint.supply, BridgeError::CapBelowSupply);
+        ctx.accounts.supply_limit.max_supply = max_supply;
+        Ok(())
+    }
+
     pub fn set_mint_operator(ctx: Context<Administer>, mint_operator: Pubkey) -> Result<()> {
         require!(mint_operator != Pubkey::default(), BridgeError::InvalidAuthority);
         ctx.accounts.bridge.mint_operator = mint_operator;
@@ -249,6 +267,8 @@ pub struct MintDeposit<'info> {
         constraint = !bridge.paused @ BridgeError::Paused
     )]
     pub bridge: Account<'info, Bridge>,
+    #[account(seeds = [b"supply_limit"], bump)]
+    pub supply_limit: Account<'info, SupplyLimit>,
     #[account(mut, seeds = [b"mint"], bump)]
     pub mint: Account<'info, Mint>,
     /// CHECK: The recipient's key is checked against the token account's owner.
@@ -376,6 +396,36 @@ pub struct TransferAdmin<'info> {
     pub bridge: Account<'info, Bridge>,
 }
 
+#[derive(Accounts)]
+pub struct InitializeSupplyLimit<'info> {
+    #[account(mut)]
+    pub admin: Signer<'info>,
+    #[account(seeds = [b"bridge"], bump, has_one = admin @ BridgeError::Unauthorized)]
+    pub bridge: Account<'info, Bridge>,
+    #[account(seeds = [b"mint"], bump)]
+    pub mint: Account<'info, Mint>,
+    #[account(init, payer = admin, space = 8 + SupplyLimit::INIT_SPACE, seeds = [b"supply_limit"], bump)]
+    pub supply_limit: Account<'info, SupplyLimit>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct SetMaxSupply<'info> {
+    pub admin: Signer<'info>,
+    #[account(seeds = [b"bridge"], bump, has_one = admin @ BridgeError::Unauthorized)]
+    pub bridge: Account<'info, Bridge>,
+    #[account(seeds = [b"mint"], bump)]
+    pub mint: Account<'info, Mint>,
+    #[account(mut, seeds = [b"supply_limit"], bump)]
+    pub supply_limit: Account<'info, SupplyLimit>,
+}
+
+#[account]
+#[derive(InitSpace)]
+pub struct SupplyLimit {
+    pub max_supply: u64,
+}
+
 #[account]
 #[derive(InitSpace)]
 pub struct Bridge {
@@ -439,4 +489,8 @@ pub enum BridgeError {
     InvalidPayoutTxid,
     #[msg("The metadata URI must be an HTTPS URL of at most 200 bytes.")]
     InvalidMetadataUri,
+    #[msg("Mint would exceed the configured maximum wGRC supply.")]
+    SupplyCapExceeded,
+    #[msg("Maximum supply cannot be lower than the current wGRC supply.")]
+    CapBelowSupply,
 }

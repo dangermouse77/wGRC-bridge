@@ -174,12 +174,59 @@ Core version and network.
 | Decimals | 8 (proposed) |
 | Backing asset | Native Gridcoin (GRC) |
 | Target backing ratio | 1:1 |
+| Initial maximum outstanding supply | 2,000,000 wGRC; configurable by the bridge administrator |
 | Mint authority | Bridge program PDA |
 | Burn mechanism | Operator settles an escrowed withdrawal after Gridcoin payout confirmation |
 | Metadata | Metaplex metadata with a hosted JSON file and violet Gridcoin logo |
 | Mainnet mint address | Not deployed |
 
 The final token precision must be compatible with the Gridcoin network's native amount representation. Conversions must be exact and must never introduce unbacked units.
+
+### Configurable supply cap
+
+The bridge enforces an initial maximum outstanding supply of **2,000,000 wGRC**
+(200,000,000,000,000 base units), matching the operator's stated initial GRC
+backing capacity from Deep Space Computing AG. This limit is an issuance
+control, not evidence that reserves have been funded; reserve reconciliation
+remains necessary.
+
+Every mint checks `current SPL supply + deposit amount <= maximum` on-chain.
+An excess mint fails atomically without issuing tokens or creating a deposit
+receipt. Concurrent mints cannot exceed the cap because they write the same
+mint account. Escrowed withdrawals still count toward supply; completed burns
+free capacity again. Only the current bridge administrator (`bridge.admin`)
+can change the cap, including after an admin transfer. The mint operator alone
+cannot. The cap cannot be lowered below existing supply.
+
+The deposit scripts check finalized Solana capacity before creating and before
+broadcasting a Gridcoin deposit. These checks do not reserve capacity. Another
+deposit or an admin cap change can consume it before minting. Solana cannot
+reject or reverse a native Gridcoin transaction: a deposit already broadcast
+can still confirm, while its excess mint is rejected and stays pending in the
+relayer for operator review. There is no automatic GRC refund. Resolve backing
+and capacity before retrying; a guaranteed cross-chain rejection would require
+a separate reservation/refund protocol.
+
+**Deployment required:** these changes are not active on the deployed program
+until it is upgraded. Stop mint workers, run `anchor build` to regenerate the
+program and IDL, and upgrade the existing program using the upgrade authority.
+Then use the bridge administrator wallet to initialize the separate supply-limit
+PDA. The existing bridge account layout is unchanged. Both fresh deployments
+and upgrades require this one-time initialization; minting fails closed until
+it completes. Update all mint clients to include the `supplyLimit` account.
+
+```bash
+# ANCHOR_WALLET must point to the current bridge administrator's keypair.
+bash bin/supply_limit.sh initialize       # Initial cap: 2,000,000 wGRC
+bash bin/supply_limit.sh show             # Supply and cap in base units
+bash bin/supply_limit.sh set 2000000      # Change cap in whole wGRC or up to 8 decimals
+```
+
+These scripts currently target Devnet. Use plain numbers without thousands
+separators. No PostgreSQL migration is needed. Validate with `anchor test`
+on localnet before upgrading Devnet. Contract tests cover authority checks,
+the exact boundary, rejection without a receipt, escrow accounting, burns,
+and competing mints at the final available base unit.
 
 ### Read the Devnet supply
 

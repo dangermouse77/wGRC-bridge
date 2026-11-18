@@ -63,6 +63,7 @@ async function main() {
       await program.methods.mintDeposit([...depositId], amount).accountsStrict({
         bridge,
         mint,
+        supplyLimit: pda("supply_limit"),
         mintOperator: operator,
         recipient,
         recipientTokens,

@@ -60,6 +60,7 @@ test("mints wGRC, locks it in escrow, and burns it on Devnet settlement", async 
   const common = { bridge, mint, tokenProgram: TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId };
   const mintInstruction = await program.methods.mintDeposit([...depositId], amount).accountsStrict({
     ...common,
+    supplyLimit: pda("supply_limit"),
     mintOperator: operator,
     recipient: operator,
     recipientTokens: account,

@@ -161,6 +161,7 @@ async function main() {
   const { rpc, endpoint, address, script } = await connectTestnet(reserveAddress);
 
   async function broadcastDeposit(record, signedHex) {
+    await require("./supply-limit.cjs").assertDepositCapacity(record.amountBaseUnits);
     console.error(`Broadcasting Gridcoin Testnet transaction ${record.txid}`);
     const acknowledgedTxid = await rpc("sendrawtransaction", signedHex);
     if (acknowledgedTxid !== record.txid) {
@@ -210,6 +211,7 @@ async function main() {
 
   const amount = baseUnits(value);
   if (amount === 0n) throw new Error("The deposit amount must be positive.");
+  await require("./supply-limit.cjs").assertDepositCapacity(amount);
   const recipient = new PublicKey(extra);
   const payload = "5747524301" + recipient.toBuffer().toString("hex");
   const raw = await rpc("createrawtransaction", [], { [address.address]: value, data: payload });

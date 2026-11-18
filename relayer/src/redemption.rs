@@ -47,6 +47,42 @@ pub fn process(
     process_payout(db, reserve, minimum, mint, address, true)
 }
 
+pub fn process_queue(db: &mut Client, reserve: &str, minimum: &str, mint: &str) -> Result<()> {
+    // Existing payouts take priority. Final checks and preparation are serialized
+    // inside process_payout, including when another worker selected this row.
+    if recover_open_payout(db, reserve, minimum, mint)? {
+        return Ok(());
+    }
+    let row = db.query_opt(
+        "SELECT w.withdrawal_address FROM wgrc.solana_withdrawals w
+         WHERE w.status = 'pending'
+           AND NOT EXISTS (SELECT 1 FROM wgrc.redemption_payouts p WHERE p.withdrawal_address = w.withdrawal_address)
+           AND NOT EXISTS (SELECT 1 FROM wgrc.redemption_cancellations c WHERE c.withdrawal_address = w.withdrawal_address)
+         ORDER BY w.first_observed_slot, w.withdrawal_address LIMIT 1", &[],
+    )?;
+    if let Some(row) = row {
+        process(db, reserve, minimum, mint, row.get(0))?;
+    }
+    Ok(())
+}
+
+pub fn recover_cancellations(db: &mut Client, reserve: &str, minimum: &str, mint: &str) -> Result<()> {
+    let rows = db.query(
+        "SELECT withdrawal_address FROM wgrc.redemption_cancellations
+         WHERE finalized_at IS NULL ORDER BY requested_at, withdrawal_address LIMIT 20", &[],
+    )?;
+    let mut failed = false;
+    for row in rows {
+        let address: &str = row.get(0);
+        if let Err(error) = cancel(db, reserve, minimum, mint, address) {
+            eprintln!("Cancellation recovery for {address}: {error}");
+            failed = true;
+        }
+    }
+    if failed { return Err("Some cancellations require retry or review.".into()); }
+    Ok(())
+}
+
 pub fn cancel(db: &mut Client, reserve: &str, minimum: &str, mint: &str, address: &str) -> Result<()> {
     let mut transaction = db.transaction()?;
     transaction.query_one("SELECT pg_advisory_xact_lock(714033, 1)", &[])?;

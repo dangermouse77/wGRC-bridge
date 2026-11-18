@@ -573,6 +573,16 @@ figures as the detailed report.
 
 ### Phase 4 — CLI and Integration Testing
 
+The initial unified CLI and service runner are implemented. Build with
+`cargo build --release -p wgrc-relayer`, then run
+`bash bin/wgrc serve 3339204 --once` for one cycle, or omit `--once` for
+continuous operation. Use the reserve's existing start height. The service
+coordinates discovery, minting, payout and cancellation recovery, and periodic
+reconciliation. New payouts require explicit `--enable-payouts` and should stay
+disabled for unattended operation until the live concurrency checks pass.
+See [bridge service operations](docs/bridge-service.md) for the systemd
+template, configuration, shutdown behavior, and live validation procedure.
+
 Stop existing relayer workers, apply
 `relayer/migrations/005_redemption_cancellations.sql`, and restart with the
 updated code. Cancel an unpaid withdrawal with
@@ -592,8 +602,9 @@ workers and their process tree, including on Linux `solchain`. Database lock
 waits are limited to 15 seconds and statements to 30 seconds. A timeout does
 not prove a blockchain submission failed. Resume the same operation; payout
 recovery reuses saved bytes, and mint/cancellation retries check finalized
-state. Continuous redemption recovery retries automatically; watcher commands
-may exit on errors and require restart until service supervision is implemented.
+state. Continuous redemption recovery retries automatically. The service retries
+failed watcher commands on its next cycle; standalone watchers can still exit
+on errors.
 
 Payout preparation checks the source transaction of each candidate reserve
 output. Outputs from transactions containing `OP_RETURN` remain protected
@@ -612,7 +623,8 @@ overlapping mint completion, and failed source lookups. Live mixed-flow
 verification remains outstanding. Deposit input protection itself requires no
 migration; cancellation coordination requires migration 005 above.
 
-- [ ] Implement unified `wgrc` CLI.
+- [x] Implement initial unified `wgrc` operator CLI.
+- [x] Implement a service runner and systemd template with opt-in queued payouts.
 - [x] Coordinate relayer cancellation with payouts using durable cancellation intent.
 - [x] Bound worker execution and database lock waits.
 - [ ] Verify cancellation/payout races and timeout recovery against PostgreSQL and Devnet.

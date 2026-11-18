@@ -1,0 +1,22 @@
+[Unit]
+Description=wGRC Testnet to Devnet bridge
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=dm
+WorkingDirectory=/home/dm/solana-projects/wGRC-bridge
+EnvironmentFile=/home/dm/.config/wgrc-bridge/service.env
+ExecStart=/bin/bash /home/dm/solana-projects/wGRC-bridge/bin/wgrc serve 3339204
+Restart=on-failure
+RestartSec=15
+# SIGTERM only the supervisor so its active command can finish. On timeout,
+# systemd kills the entire cgroup, including detached Node worker processes.
+KillMode=mixed
+TimeoutStopSec=180
+UMask=0077
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

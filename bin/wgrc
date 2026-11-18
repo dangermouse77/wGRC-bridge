@@ -1,0 +1,45 @@
+#!/bin/bash
+set -euo pipefail
+root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+if (( $# == 0 )) || [[ "$1" == "--help" ]]; then
+  cat <<'HELP'
+Usage: bash bin/wgrc COMMAND [ARGS]
+  serve START_HEIGHT [--once] [--enable-payouts]
+  watch-gridcoin START_HEIGHT [--once] [--mint]
+  watch-solana [--once]
+  process-deposit TXID
+  process-redemption WITHDRAWAL_ADDRESS
+  cancel-redemption WITHDRAWAL_ADDRESS
+  process-redemptions        Process at most one queued withdrawal
+  recover-redemptions [--once]
+  recover-cancellations
+  reconcile-reserve
+Build first: cargo build --release -p wgrc-relayer
+HELP
+  exit 0
+fi
+case "$1" in
+  serve|watch-gridcoin|process-deposit|process-redemption|process-redemptions|recover-redemptions|reconcile-reserve)
+    if [[ -z ${GRC_RPC_PASSWORD:-} && ! -t 0 ]]; then
+      echo 'Set GRC_RPC_PASSWORD for noninteractive operation.' >&2
+      exit 1
+    fi
+    source "$root/bin/deposit-common.sh"
+    export WGRC_TESTNET_RESERVE_ADDRESS="$reserve"
+    ;;
+  watch-solana|cancel-redemption|recover-cancellations) ;;
+  *) echo 'Unknown command. Run bash bin/wgrc --help.' >&2; exit 1 ;;
+esac
+export ANCHOR_PROVIDER_URL="${ANCHOR_PROVIDER_URL:-https://api.devnet.solana.com}"
+export ANCHOR_WALLET="${ANCHOR_WALLET:-$HOME/.config/solana/devnet.json}"
+cd -- "$root"
+export WGRC_RELAYER_BIN="${WGRC_RELAYER_BIN:-$root/target/release/wgrc-relayer}"
+if [[ ! -x "$WGRC_RELAYER_BIN" ]]; then
+  echo 'Relayer binary missing. Run cargo build --release -p wgrc-relayer.' >&2
+  exit 1
+fi
+if [[ "$1" == serve ]]; then
+  shift
+  exec node relayer/service.cjs "$@"
+fi
+exec "$WGRC_RELAYER_BIN" "$@"

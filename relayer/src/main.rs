@@ -123,6 +123,8 @@ enum Action<'a> {
     ProcessDeposit(&'a str),
     ProcessRedemption(&'a str),
     CancelRedemption(&'a str),
+    ProcessRedemptions,
+    RecoverCancellations,
     RecoverRedemptions { once: bool },
     ReconcileReserve,
     WatchGridcoin { height: i64, once: bool, mint: bool },
@@ -138,6 +140,8 @@ fn run() -> Result<()> {
                 && txid.bytes().all(|byte| byte.is_ascii_hexdigit()) => Action::ProcessDeposit(txid),
         [command, address] if command == "process-redemption" => Action::ProcessRedemption(address),
         [command, address] if command == "cancel-redemption" => Action::CancelRedemption(address),
+        [command] if command == "process-redemptions" => Action::ProcessRedemptions,
+        [command] if command == "recover-cancellations" => Action::RecoverCancellations,
         [command] if command == "reconcile-reserve" => Action::ReconcileReserve,
         [command, flags @ ..]
             if command == "recover-redemptions"
@@ -164,7 +168,7 @@ fn run() -> Result<()> {
         {
             Action::WatchSolana { once: !flags.is_empty() }
         }
-        _ => return Err("Usage: wgrc-relayer process-deposit TXID | process-redemption WITHDRAWAL_ADDRESS | cancel-redemption WITHDRAWAL_ADDRESS | recover-redemptions [--once] | reconcile-reserve | watch-gridcoin START_HEIGHT [--once] [--mint] | watch-solana [--once]".into()),
+        _ => return Err("Usage: wgrc-relayer process-deposit TXID | process-redemption WITHDRAWAL_ADDRESS | cancel-redemption WITHDRAWAL_ADDRESS | process-redemptions | recover-cancellations | recover-redemptions [--once] | reconcile-reserve | watch-gridcoin START_HEIGHT [--once] [--mint] | watch-solana [--once]".into()),
     };
     let bridge_config = match fs::read(DEV_CONFIG) {
         Ok(content) => Some(content),
@@ -219,6 +223,15 @@ fn run() -> Result<()> {
             let mint = settings.wgrc_mint_address.or(defaults.wgrc_mint_address)
                 .ok_or("Missing wGRC mint address")?;
             redemption::cancel(&mut connect()?, &reserve, &minimum, &mint, address)
+        }
+        Action::ProcessRedemptions | Action::RecoverCancellations => {
+            let mint = settings.wgrc_mint_address.or(defaults.wgrc_mint_address)
+                .ok_or("Missing wGRC mint address")?;
+            if matches!(action, Action::ProcessRedemptions) {
+                redemption::process_queue(&mut connect()?, &reserve, &minimum, &mint)
+            } else {
+                redemption::recover_cancellations(&mut connect()?, &reserve, &minimum, &mint)
+            }
         }
         Action::RecoverRedemptions { once } => {
             let mint = settings.wgrc_mint_address.or(defaults.wgrc_mint_address)

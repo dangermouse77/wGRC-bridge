@@ -573,7 +573,26 @@ figures as the detailed report.
 
 ### Phase 4 — CLI and Integration Testing
 
+Payout preparation checks the source transaction of each candidate reserve
+output. Outputs from transactions containing `OP_RETURN` remain protected
+until that exact outpoint has a committed finalized mint record in
+`wgrc.deposits`. This covers deposits that the watcher has not discovered yet
+and mints awaiting database recovery. Ordinary reserve funding and payout
+change remain eligible. Unknown or malformed data transactions are also
+protected conservatively. If eligible funds cannot cover the payout and fee,
+preparation stops before signing; finish mint processing or fund the reserve
+separately, then retry. Existing saved payouts retain their original bytes
+and inputs during recovery. This protection applies to relayer payout
+preparation; external wallet spending and staking require separate controls.
+
+Mocked redemption tests cover protected deposits, finalized input release,
+overlapping mint completion, and failed source lookups. Live mixed-flow
+verification remains outstanding. No database migration is needed.
+
 - [ ] Implement unified `wgrc` CLI.
+- [ ] Run the whole bridge as a supervised service on `solchain`, coordinating discovery, minting, queued payouts, recovery, and periodic reconciliation with graceful shutdown and restart.
+- [x] Protect unminted deposit outputs from relayer payout input selection, including deposits not yet discovered by the watcher.
+- [ ] Verify overlapping deposits and withdrawals live, including worker restarts and duplicate prevention, before enabling automatic payout initiation.
 - [ ] Test complete Gridcoin-to-Solana flow.
 - [ ] Test complete Solana-to-Gridcoin flow.
 - [ ] Test failures, restarts, and duplicate prevention.

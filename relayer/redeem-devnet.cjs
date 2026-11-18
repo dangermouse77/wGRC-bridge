@@ -25,7 +25,9 @@ function validateOutputs(tx, destinationScript, reserveScript, amount) {
   }
 }
 
-async function preparePayout(rpc, reserve, destination, minimum, amount, fee) {
+async function preparePayout(rpc, reserve, destination, minimum, amount, fee, mintedOutpoints = []) {
+  const minted = new Set(mintedOutpoints);
+  const sourceTransactions = new Map();
   const coins = await rpc("listunspent", minimum, 9999999, [reserve.address.address]);
   assert.ok(Array.isArray(coins), "Expected the reserve wallet's unspent outputs.");
   const inputs = [];
@@ -39,10 +41,28 @@ async function preparePayout(rpc, reserve, destination, minimum, amount, fee) {
     const outpoint = `${coin.txid}:${coin.vout}`;
     assert.ok(!selected.has(outpoint), "Duplicate reserve output returned by Gridcoin.");
     selected.add(outpoint);
+    // Inspect the chain, not just discovery rows: the watcher may be behind.
+    // A stale finalized snapshot only delays spending; it cannot release an
+    // unminted deposit. Preserve even malformed/unknown data transactions.
+    if (!sourceTransactions.has(coin.txid)) {
+      const source = await rpc("getrawtransaction", coin.txid, true);
+      assert.equal(source.txid, coin.txid, "Gridcoin returned a different input transaction.");
+      assert.ok(Array.isArray(source.vout) && source.vout.length > 0, "Missing input transaction outputs.");
+      for (const output of source.vout) {
+        assert.match(output.scriptPubKey?.hex ?? "invalid", /^(?:[a-f0-9]{2})*$/);
+      }
+      sourceTransactions.set(coin.txid, source);
+    }
+    const source = sourceTransactions.get(coin.txid);
+    const output = source.vout.find((out) => out.n === coin.vout);
+    assert.equal(output?.scriptPubKey.hex, reserve.script, "Reserve input script mismatch.");
+    assert.equal(baseUnits(output.value), baseUnits(coin.amount), "Reserve input amount mismatch.");
+    if (source.vout.some((out) => out.scriptPubKey.hex.startsWith("6a")) && !minted.has(outpoint)) continue;
     inputs.push({ txid: coin.txid, vout: coin.vout });
     total += baseUnits(coin.amount);
   }
-  assert.ok(total >= amount + fee, "Reserve has insufficient confirmed spendable GRC for the payout and fee.");
+  assert.ok(total >= amount + fee,
+    "Reserve has insufficient eligible GRC for the payout and fee; unminted deposit/data outputs are protected. Finish mint processing or fund the reserve separately.");
   const change = total - amount - fee;
   const outputs = { [destination.address.address]: grc(amount) };
   if (change > 0n) outputs[reserve.address.address] = grc(change);
@@ -160,7 +180,8 @@ async function main() {
     await verifyWithdrawal("pending");
     const fee = BigInt(request.feeBaseUnits);
     assert.ok(fee > 0n, "Payout fee must be positive.");
-    console.log(JSON.stringify(await preparePayout(rpc, reserve, destination, minimum, amount, fee)));
+    assert.ok(Array.isArray(request.mintedOutpoints), "Missing finalized deposit input snapshot.");
+    console.log(JSON.stringify(await preparePayout(rpc, reserve, destination, minimum, amount, fee, request.mintedOutpoints)));
     return;
   }
   const payout = request.payout;

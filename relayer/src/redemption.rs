@@ -25,6 +25,7 @@ struct Request<'a> {
     fee_base_units: Option<String>,
     payout: Option<Payout>,
     payout_block_hash: Option<String>,
+    minted_outpoints: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -119,6 +120,7 @@ fn process_payout(
         fee_base_units: None,
         payout: None,
         payout_block_hash: None,
+        minted_outpoints: Vec::new(),
     };
 
     match row.get::<_, Option<String>>(5) {
@@ -151,6 +153,14 @@ fn process_payout(
             }
             let fee = fee.to_string();
             request.fee_base_units = Some(fee.clone());
+            // Only committed finalized mints may release deposit outputs for
+            // spending. The Node helper also checks transactions not yet seen
+            // by the watcher, so discovery lag cannot expose fresh deposits.
+            request.minted_outpoints = transaction.query(
+                "SELECT txid || ':' || vout::text FROM wgrc.deposits
+                 WHERE reserve_address = $1 AND finalized_at IS NOT NULL",
+                &[&reserve],
+            )?.iter().map(|row| row.get::<_, String>(0)).collect();
             let payout: Payout = node(
                 "relayer/redeem-devnet.cjs",
                 &["prepare", reserve, minimum, &serde_json::to_string(&request)?],

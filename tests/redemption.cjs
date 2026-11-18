@@ -10,8 +10,8 @@ const unexpected = async () => assert.fail("Unexpected broadcast or settlement."
 const missing = Object.assign(new Error("Transaction not found"), { rpcCode: -5 });
 
 test("prepares an exact payout using only reserve inputs and reserve change", async () => {
-  const reserve = { address: { address: "reserve" }, script: "reserve-script" };
-  const destination = { address: { address: "destination" }, script: "destination-script" };
+  const reserve = { address: { address: "reserve" }, script: "51" };
+  const destination = { address: { address: "destination" }, script: "52" };
   const input = { txid: "12".repeat(32), vout: 2 };
   const rpc = async (method, ...params) => {
     switch (method) {
@@ -24,6 +24,11 @@ test("prepares an exact payout using only reserve inputs and reserve change", as
       case "createrawtransaction":
         assert.deepEqual(params, [[input], { destination: "1.00000001", reserve: "0.99899999" }]);
         return "unsigned";
+      case "getrawtransaction":
+        assert.deepEqual(params, [input.txid, true]);
+        return { txid: input.txid, vout: [
+          { n: input.vout, value: "2.00000000", scriptPubKey: { hex: reserve.script } },
+        ] };
       case "signrawtransaction":
         assert.deepEqual(params, ["unsigned"]);
         return { complete: true, hex: payout.signedHex };
@@ -38,6 +43,75 @@ test("prepares an exact payout using only reserve inputs and reserve change", as
     }
   };
   assert.deepEqual(await preparePayout(rpc, reserve, destination, 10, 100000001n, 100000n), payout);
+});
+
+const reserve = { address: { address: "reserve" }, script: "51" };
+const destination = { address: { address: "destination" }, script: "52" };
+const depositInput = { txid: "cd".repeat(32), vout: 0 };
+const fundingInput = { txid: "ef".repeat(32), vout: 0 };
+const depositOutpoint = `${depositInput.txid}:0`;
+
+function selectionRpc(inputs, expectedInput, { lookupError = false, malformed = false } = {}) {
+  return async (method, ...params) => {
+    switch (method) {
+      case "listunspent":
+        return inputs.map((input) => ({ ...input, scriptPubKey: reserve.script, amount: "2" }));
+      case "getrawtransaction": {
+        if (lookupError) throw new Error("Source lookup unavailable");
+        const outputs = [{ n: 0, value: "2", scriptPubKey: { hex: "51" } }];
+        if (params[0] === depositInput.txid) outputs.push({ n: 1, value: "0.00000001",
+          scriptPubKey: { hex: malformed ? "6a01ff" : `6a255747524301${"11".repeat(32)}` } });
+        return { txid: params[0], vout: outputs };
+      }
+      case "createrawtransaction":
+        assert.ok(expectedInput, "Must not construct a payout using protected inputs");
+        assert.deepEqual(params[0], [expectedInput]);
+        return "unsigned";
+      case "signrawtransaction":
+        return { complete: true, hex: payout.signedHex };
+      case "decoderawtransaction":
+        return { txid, vin: [expectedInput], vout: [
+          { value: "1", scriptPubKey: { hex: "52" } },
+          { value: "0.999", scriptPubKey: { hex: "51" } },
+        ] };
+      default:
+        assert.fail(`Unexpected RPC ${method}`);
+    }
+  };
+}
+
+test("payout skips undiscovered or pending deposits and uses separate reserve funding", async () => {
+  const rpc = selectionRpc([depositInput, fundingInput], fundingInput);
+  assert.deepEqual(await preparePayout(rpc, reserve, destination, 10, 100000000n, 100000n, []), payout);
+});
+
+test("only the exact finalized deposit outpoint becomes eligible", async () => {
+  for (const minted of [[], [`${depositInput.txid}:1`], [`${fundingInput.txid}:0`]]) {
+    await assert.rejects(preparePayout(selectionRpc([depositInput]), reserve, destination,
+      10, 100000000n, 100000n, minted), /unminted deposit\/data outputs are protected/);
+  }
+  assert.deepEqual(await preparePayout(selectionRpc([depositInput], depositInput), reserve, destination,
+    10, 100000000n, 100000n, [depositOutpoint]), payout);
+});
+
+test("a mint finishing during preparation only releases its input on the next attempt", async () => {
+  const finalized = [];
+  const rpc = selectionRpc([depositInput], depositInput);
+  const concurrentRpc = async (method, ...params) => {
+    if (method === "listunspent") finalized.push(depositOutpoint);
+    return rpc(method, ...params);
+  };
+  await assert.rejects(preparePayout(concurrentRpc, reserve, destination,
+    10, 100000000n, 100000n, finalized), /unminted deposit\/data outputs are protected/);
+  assert.deepEqual(await preparePayout(rpc, reserve, destination,
+    10, 100000000n, 100000n, finalized), payout);
+});
+
+test("unknown data outputs stay protected and source lookup failures stop preparation", async () => {
+  await assert.rejects(preparePayout(selectionRpc([depositInput], undefined, { malformed: true }),
+    reserve, destination, 10, 100000000n, 100000n), /unminted deposit\/data outputs are protected/);
+  await assert.rejects(preparePayout(selectionRpc([fundingInput], undefined, { lookupError: true }),
+    reserve, destination, 10, 100000000n, 100000n), /Source lookup unavailable/);
 });
 
 test("broadcasts the saved bytes and waits for confirmations", async () => {

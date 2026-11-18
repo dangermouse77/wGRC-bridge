@@ -537,6 +537,12 @@ The Gridcoin watcher discovered a confirmed 2 GRC deposit in Testnet block
 3340013 and automatically minted 2 wGRC on Solana Devnet. A second run skipped
 the finalized deposit without submitting another mint.
 
+The live redemption pilot paid 1 GRC on Gridcoin Testnet and burned 1 wGRC
+from Solana Devnet escrow after the payout reached 14 confirmations. Replaying
+the command returned the original payout transaction ID and settlement
+signature. The Solana watcher recorded the transition to settled once, and
+PostgreSQL held one relayer payout row for the withdrawal.
+
 - [x] Implement the Rust relayer command for a single deposit.
 - [x] Create the PostgreSQL deposit schema and migration.
 - [x] Verify deposit-backed Devnet minting and replay protection.
@@ -547,7 +553,7 @@ the finalized deposit without submitting another mint.
 - [x] Connect Gridcoin deposit discovery to automatic Devnet mint processing.
 - [x] Verify automatic mint processing and replay protection on Devnet.
 - [x] Implement Testnet payout preparation, recovery, and Devnet escrow settlement.
-- [ ] Verify the full redemption flow on Gridcoin Testnet and Solana Devnet.
+- [x] Verify the full redemption flow on Gridcoin Testnet and Solana Devnet.
 - [ ] Implement automatic retries and recovery for the relayer.
 - [ ] Implement reserve reconciliation.
 

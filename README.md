@@ -543,6 +543,10 @@ the command returned the original payout transaction ID and settlement
 signature. The Solana watcher recorded the transition to settled once, and
 PostgreSQL held one relayer payout row for the withdrawal.
 
+The recovery worker was stopped while a live payout had 8 Gridcoin
+confirmations. After restart it resumed the saved payout transaction and
+settled the Devnet escrow automatically at 10 confirmations.
+
 - [x] Implement the Rust relayer command for a single deposit.
 - [x] Create the PostgreSQL deposit schema and migration.
 - [x] Verify deposit-backed Devnet minting and replay protection.
@@ -555,7 +559,7 @@ PostgreSQL held one relayer payout row for the withdrawal.
 - [x] Implement Testnet payout preparation, recovery, and Devnet escrow settlement.
 - [x] Verify the full redemption flow on Gridcoin Testnet and Solana Devnet.
 - [x] Implement automatic retries and recovery for unfinished redemption payouts.
-- [ ] Verify redemption recovery after interrupting and restarting the worker.
+- [x] Verify redemption recovery after interrupting and restarting the worker.
 - [ ] Implement reserve reconciliation.
 
 ### Phase 4 — CLI and Integration Testing

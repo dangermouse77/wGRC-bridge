@@ -47,6 +47,48 @@ pub fn process(
     process_payout(db, reserve, minimum, mint, address, true)
 }
 
+pub fn cancel(db: &mut Client, reserve: &str, minimum: &str, mint: &str, address: &str) -> Result<()> {
+    let mut transaction = db.transaction()?;
+    transaction.query_one("SELECT pg_advisory_xact_lock(714033, 1)", &[])?;
+    if transaction.query_opt(
+        "SELECT 1 FROM wgrc.redemption_payouts WHERE withdrawal_address = $1", &[&address],
+    )?.is_some() {
+        return Err("Cannot cancel a withdrawal with a saved payout, even if broadcast is unconfirmed. Resume payout recovery.".into());
+    }
+    let row = transaction.query_opt(
+        "SELECT owner_address, nonce::text, amount_base_units::text, gridcoin_address, status
+         FROM wgrc.solana_withdrawals WHERE withdrawal_address = $1", &[&address],
+    )?.ok_or("Withdrawal has not been discovered. Run watch-solana --once first.")?;
+    if !matches!(row.get::<_, &str>(4), "pending" | "cancelled") {
+        return Err("Only pending or already cancelled withdrawals can be cancelled.".into());
+    }
+    let request = Request {
+        address, owner: row.get(0), nonce: row.get(1), amount_base_units: row.get(2),
+        gridcoin_address: row.get(3), mint, fee_base_units: None, payout: None,
+        payout_block_hash: None, minted_outpoints: Vec::new(),
+    };
+    transaction.execute(
+        "INSERT INTO wgrc.redemption_cancellations (withdrawal_address) VALUES ($1)
+         ON CONFLICT (withdrawal_address) DO NOTHING", &[&address],
+    )?;
+    transaction.commit()?;
+    // Commit intent before a potentially ambiguous Solana submission. Never
+    // remove it on failure: an in-flight cancellation may still finalize.
+    let mut transaction = db.transaction()?;
+    transaction.query_one("SELECT pg_advisory_xact_lock(714033, 1)", &[])?;
+    let result: serde_json::Value = node("relayer/redeem-devnet.cjs",
+        &["cancel", reserve, minimum, &serde_json::to_string(&request)?])?;
+    let signature = result["signature"].as_str();
+    transaction.execute(
+        "UPDATE wgrc.redemption_cancellations SET finalized_at = COALESCE(finalized_at, now()),
+         signature = COALESCE(signature, $2) WHERE withdrawal_address = $1",
+        &[&address, &signature],
+    )?;
+    transaction.commit()?;
+    println!("{result}");
+    Ok(())
+}
+
 pub fn recover(
     connect: impl Fn() -> Result<Client>,
     reserve: &str,
@@ -102,6 +144,12 @@ fn process_payout(
 ) -> Result<()> {
     let mut transaction = db.transaction()?;
     transaction.query_one("SELECT pg_advisory_xact_lock(714033, 1)", &[])?;
+    if transaction.query_opt(
+        "SELECT 1 FROM wgrc.redemption_cancellations WHERE withdrawal_address = $1",
+        &[&address],
+    )?.is_some() {
+        return Err("Cancellation requested. Resume cancel-redemption; payout is blocked.".into());
+    }
     let row = transaction.query_opt(
         "SELECT w.owner_address, w.nonce::text, w.amount_base_units::text, w.gridcoin_address,
                 w.status, p.reserve_address, p.txid, p.signed_hex

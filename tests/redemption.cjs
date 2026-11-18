@@ -1,6 +1,6 @@
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
-const { advancePayout, preparePayout } = require("../relayer/redeem-devnet.cjs");
+const { advancePayout, preparePayout, cancelWithdrawal } = require("../relayer/redeem-devnet.cjs");
 
 const txid = "ab".repeat(32);
 const blockhash = "34".repeat(32);
@@ -8,6 +8,28 @@ const payout = { txid, signedHex: "0102" };
 const pending = async () => "pending";
 const unexpected = async () => assert.fail("Unexpected broadcast or settlement.");
 const missing = Object.assign(new Error("Transaction not found"), { rpcCode: -5 });
+
+test("cancellation recovers a lost submission response without refunding twice", async () => {
+  let status = "pending";
+  let submissions = 0;
+  await assert.rejects(cancelWithdrawal(async () => status, async () => {
+    submissions++;
+    status = "cancelled";
+    throw new Error("Submission timed out");
+  }), /timed out/);
+  assert.equal(await cancelWithdrawal(async () => status, unexpected), null);
+  assert.equal(submissions, 1);
+});
+
+test("cancellation refuses settled withdrawals and requires finalized cancellation", async () => {
+  await assert.rejects(cancelWithdrawal(async () => "settled", unexpected), /Only pending/);
+  await assert.rejects(cancelWithdrawal(pending, async () => "signature"), /not finalized/);
+  let status = "pending";
+  assert.equal(await cancelWithdrawal(async () => status, async () => {
+    status = "cancelled";
+    return "signature";
+  }), "signature");
+});
 
 test("prepares an exact payout using only reserve inputs and reserve change", async () => {
   const reserve = { address: { address: "reserve" }, script: "51" };

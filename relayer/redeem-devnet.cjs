@@ -89,6 +89,15 @@ async function findPayout(rpc, txid) {
   }
 }
 
+async function cancelWithdrawal(verify, submit) {
+  const status = await verify();
+  if (status === "cancelled") return null;
+  assert.equal(status, "pending", "Only pending withdrawals can be cancelled.");
+  const signature = await submit();
+  assert.equal(await verify(), "cancelled", "Cancellation is not finalized. Retry cancel-redemption.");
+  return signature;
+}
+
 async function advancePayout(rpc, payout, minimum, verifyPending, settle, previousBlockHash) {
   const current = await verifyPending();
   if (previousBlockHash) {
@@ -116,14 +125,15 @@ async function advancePayout(rpc, payout, minimum, verifyPending, settle, previo
 
 async function main() {
   const [mode, reserveAddress, minimumArg, input] = process.argv.slice(2);
-  assert.ok(mode === "prepare" || mode === "advance", "Expected prepare or advance mode.");
+  assert.ok(["prepare", "advance", "cancel"].includes(mode), "Expected prepare, advance or cancel mode.");
   const minimum = Number(minimumArg);
   assert.ok(/^\d+$/.test(minimumArg) && Number.isSafeInteger(minimum) && minimum > 0);
   const request = JSON.parse(input);
   const amount = BigInt(request.amountBaseUnits);
   const { AnchorProvider, Program } = require("@anchor-lang/core");
   const { Connection, PublicKey } = require("@solana/web3.js");
-  const { getAccount, TOKEN_PROGRAM_ID } = require("@solana/spl-token");
+  const { getAccount, TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync,
+    createAssociatedTokenAccountIdempotentInstruction } = require("@solana/spl-token");
   const idl = require("../target/idl/wgrc_bridge.json");
   assert.equal(process.env.ANCHOR_PROVIDER_URL, DEVNET_URL, "Redemption requires the public Solana Devnet RPC.");
   const environment = AnchorProvider.env();
@@ -158,7 +168,9 @@ async function main() {
     assert.ok(pda("withdrawal", state.owner.toBuffer(), state.nonce.toArrayLike(Buffer, "le", 8))
       .equals(withdrawal), "Withdrawal PDA does not match its owner and nonce.");
     if (requiredStatus) assert.equal(status, requiredStatus, "Withdrawal status changed.");
-    if (status === "settled") {
+    if (status === "cancelled" && mode === "cancel") {
+      return status;
+    } else if (status === "settled") {
       assert.ok(request.payout, "Withdrawal was settled outside the relayer.");
       assert.equal(Buffer.from(state.status.settled.gridcoinTxid).toString("hex"), request.payout.txid,
         "Withdrawal was settled with a different Gridcoin payout.");
@@ -169,6 +181,21 @@ async function main() {
         && escrow.amount >= amount && !escrow.isFrozen, "Withdrawal escrow cannot fund settlement.");
     }
     return status;
+  }
+
+  if (mode === "cancel") {
+    assert.ok(!request.payout, "Cannot cancel a saved payout.");
+    const owner = new PublicKey(request.owner);
+    const refundTokens = getAssociatedTokenAddressSync(mint, owner, true);
+    const signature = await cancelWithdrawal(() => verifyWithdrawal(), () =>
+      program.methods.cancelWithdrawal().accountsStrict({
+        resolution: { bridge, mint, withdrawal, vault, mintOperator, tokenProgram: TOKEN_PROGRAM_ID },
+        refundTokens,
+      }).preInstructions([
+        createAssociatedTokenAccountIdempotentInstruction(mintOperator, refundTokens, owner, mint),
+      ]).rpc());
+    console.log(JSON.stringify({ withdrawalAddress: request.address, status: "cancelled", signature }));
+    return;
   }
 
   const reserve = await connectTestnet(reserveAddress);
@@ -198,7 +225,7 @@ async function main() {
   console.log(JSON.stringify(result));
 }
 
-module.exports = { preparePayout, advancePayout, findPayout, validateOutputs };
+module.exports = { preparePayout, advancePayout, findPayout, validateOutputs, cancelWithdrawal };
 if (require.main === module) {
   main().catch((error) => {
     console.error(error.message);

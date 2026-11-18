@@ -95,7 +95,7 @@ fn node<T: DeserializeOwned>(script: &str, args: &[&str]) -> Result<T> {
 
 fn node_command(script: &str, args: &[&str]) -> Command {
     let mut command = Command::new("node");
-    command.arg(script).args(args).env_remove("DATABASE_URL");
+    command.arg("relayer/worker.cjs").arg(script).args(args).env_remove("DATABASE_URL");
     command
 }
 
@@ -122,6 +122,7 @@ fn node_output<T: DeserializeOwned>(script: &str, output: Output) -> Result<T> {
 enum Action<'a> {
     ProcessDeposit(&'a str),
     ProcessRedemption(&'a str),
+    CancelRedemption(&'a str),
     RecoverRedemptions { once: bool },
     ReconcileReserve,
     WatchGridcoin { height: i64, once: bool, mint: bool },
@@ -136,6 +137,7 @@ fn run() -> Result<()> {
                 && txid.len() == 64
                 && txid.bytes().all(|byte| byte.is_ascii_hexdigit()) => Action::ProcessDeposit(txid),
         [command, address] if command == "process-redemption" => Action::ProcessRedemption(address),
+        [command, address] if command == "cancel-redemption" => Action::CancelRedemption(address),
         [command] if command == "reconcile-reserve" => Action::ReconcileReserve,
         [command, flags @ ..]
             if command == "recover-redemptions"
@@ -162,7 +164,7 @@ fn run() -> Result<()> {
         {
             Action::WatchSolana { once: !flags.is_empty() }
         }
-        _ => return Err("Usage: wgrc-relayer process-deposit TXID | process-redemption WITHDRAWAL_ADDRESS | recover-redemptions [--once] | reconcile-reserve | watch-gridcoin START_HEIGHT [--once] [--mint] | watch-solana [--once]".into()),
+        _ => return Err("Usage: wgrc-relayer process-deposit TXID | process-redemption WITHDRAWAL_ADDRESS | cancel-redemption WITHDRAWAL_ADDRESS | recover-redemptions [--once] | reconcile-reserve | watch-gridcoin START_HEIGHT [--once] [--mint] | watch-solana [--once]".into()),
     };
     let bridge_config = match fs::read(DEV_CONFIG) {
         Ok(content) => Some(content),
@@ -171,7 +173,9 @@ fn run() -> Result<()> {
     };
     let config = database_config(bridge_config.as_deref())?;
     let connect = || -> Result<Client> {
-        Ok(config.connect(MakeTlsConnector::new(TlsConnector::new()?))?)
+        let mut db = config.connect(MakeTlsConnector::new(TlsConnector::new()?))?;
+        db.batch_execute("SET lock_timeout = '15s'; SET statement_timeout = '30s'")?;
+        Ok(db)
     };
     if let Action::WatchSolana { once } = action {
         return solana_watcher::watch(&mut connect()?, once);
@@ -210,6 +214,11 @@ fn run() -> Result<()> {
             let mint = settings.wgrc_mint_address.or(defaults.wgrc_mint_address)
                 .ok_or("Missing wGRC mint address")?;
             redemption::process(&mut connect()?, &reserve, &minimum, &mint, address)
+        }
+        Action::CancelRedemption(address) => {
+            let mint = settings.wgrc_mint_address.or(defaults.wgrc_mint_address)
+                .ok_or("Missing wGRC mint address")?;
+            redemption::cancel(&mut connect()?, &reserve, &minimum, &mint, address)
         }
         Action::RecoverRedemptions { once } => {
             let mint = settings.wgrc_mint_address.or(defaults.wgrc_mint_address)

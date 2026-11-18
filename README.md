@@ -573,6 +573,28 @@ figures as the detailed report.
 
 ### Phase 4 — CLI and Integration Testing
 
+Stop existing relayer workers, apply
+`relayer/migrations/005_redemption_cancellations.sql`, and restart with the
+updated code. Cancel an unpaid withdrawal with
+`bash bin/cancel_redemption.sh WITHDRAWAL_ADDRESS`. Cancellation and payout
+preparation share the same PostgreSQL advisory lock. Cancellation refuses
+any saved payout, including an unconfirmed one, and commits a permanent intent
+before submitting to Solana. The intent blocks payouts even after a timeout.
+Retry the same cancellation command to finish or recover it, then run the
+Solana watcher to refresh withdrawal status. Do not delete cancellation intents
+or bypass this command with direct operator cancellation transactions.
+This coordination requires all workers to use the updated relayer and the same
+database; it does not change the smart contract or restrict direct operator calls.
+
+Node workers have a 120-second deadline, configurable with
+`WGRC_WORKER_TIMEOUT_SECONDS` (1–3600). The supervisor terminates timed-out
+workers and their process tree, including on Linux `solchain`. Database lock
+waits are limited to 15 seconds and statements to 30 seconds. A timeout does
+not prove a blockchain submission failed. Resume the same operation; payout
+recovery reuses saved bytes, and mint/cancellation retries check finalized
+state. Continuous redemption recovery retries automatically; watcher commands
+may exit on errors and require restart until service supervision is implemented.
+
 Payout preparation checks the source transaction of each candidate reserve
 output. Outputs from transactions containing `OP_RETURN` remain protected
 until that exact outpoint has a committed finalized mint record in
@@ -587,9 +609,13 @@ preparation; external wallet spending and staking require separate controls.
 
 Mocked redemption tests cover protected deposits, finalized input release,
 overlapping mint completion, and failed source lookups. Live mixed-flow
-verification remains outstanding. No database migration is needed.
+verification remains outstanding. Deposit input protection itself requires no
+migration; cancellation coordination requires migration 005 above.
 
 - [ ] Implement unified `wgrc` CLI.
+- [x] Coordinate relayer cancellation with payouts using durable cancellation intent.
+- [x] Bound worker execution and database lock waits.
+- [ ] Verify cancellation/payout races and timeout recovery against PostgreSQL and Devnet.
 - [ ] Run the whole bridge as a supervised service on `solchain`, coordinating discovery, minting, queued payouts, recovery, and periodic reconciliation with graceful shutdown and restart.
 - [x] Protect unminted deposit outputs from relayer payout input selection, including deposits not yet discovered by the watcher.
 - [ ] Verify overlapping deposits and withdrawals live, including worker restarts and duplicate prevention, before enabling automatic payout initiation.

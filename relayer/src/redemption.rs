@@ -1,7 +1,10 @@
 use crate::{node, Result};
 use postgres::Client;
 use serde::{Deserialize, Serialize};
-use std::env;
+use std::{env, thread, time::Duration};
+
+const POLL_INTERVAL: Duration = Duration::from_secs(15);
+const MAX_RETRY_INTERVAL: Duration = Duration::from_secs(120);
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -40,6 +43,62 @@ pub fn process(
     mint: &str,
     address: &str,
 ) -> Result<()> {
+    process_payout(db, reserve, minimum, mint, address, true)
+}
+
+pub fn recover(
+    connect: impl Fn() -> Result<Client>,
+    reserve: &str,
+    minimum: &str,
+    mint: &str,
+    once: bool,
+) -> Result<()> {
+    let mut retry_delay = POLL_INTERVAL;
+    loop {
+        let result = connect().and_then(|mut db| recover_open_payout(&mut db, reserve, minimum, mint));
+        if once {
+            if !result? {
+                eprintln!("No unfinished payout for the configured reserve.");
+            }
+            return Ok(());
+        }
+        match result {
+            Ok(_) => {
+                retry_delay = POLL_INTERVAL;
+                thread::sleep(POLL_INTERVAL);
+            }
+            Err(error) => {
+                eprintln!("Redemption recovery failed: {error}. Retrying in {} seconds.", retry_delay.as_secs());
+                thread::sleep(retry_delay);
+                retry_delay = (retry_delay * 2).min(MAX_RETRY_INTERVAL);
+            }
+        }
+    }
+}
+
+fn recover_open_payout(db: &mut Client, reserve: &str, minimum: &str, mint: &str) -> Result<bool> {
+    let row = db.query_opt(
+        "SELECT withdrawal_address FROM wgrc.redemption_payouts
+         WHERE reserve_address = $1 AND settled_at IS NULL",
+        &[&reserve],
+    )?;
+    let Some(row) = row else {
+        return Ok(false);
+    };
+    let address: &str = row.get(0);
+    process_payout(db, reserve, minimum, mint, address, false)
+        .map_err(|error| format!("Withdrawal {address}: {error}"))?;
+    Ok(true)
+}
+
+fn process_payout(
+    db: &mut Client,
+    reserve: &str,
+    minimum: &str,
+    mint: &str,
+    address: &str,
+    prepare: bool,
+) -> Result<()> {
     let mut transaction = db.transaction()?;
     transaction.query_one("SELECT pg_advisory_xact_lock(714033, 1)", &[])?;
     let row = transaction.query_opt(
@@ -70,6 +129,9 @@ pub fn process(
             request.payout = Some(Payout { txid: row.get(6), signed_hex: row.get(7) });
         }
         None => {
+            if !prepare {
+                return Err("Saved payout is missing. Reconcile before retrying.".into());
+            }
             if row.get::<_, &str>(4) != "pending" {
                 return Err("Only pending escrow withdrawals can start a payout.".into());
             }

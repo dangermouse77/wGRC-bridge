@@ -102,12 +102,16 @@ async function main() {
   const request = JSON.parse(input);
   const amount = BigInt(request.amountBaseUnits);
   const { AnchorProvider, Program } = require("@anchor-lang/core");
-  const { PublicKey } = require("@solana/web3.js");
+  const { Connection, PublicKey } = require("@solana/web3.js");
   const { getAccount, TOKEN_PROGRAM_ID } = require("@solana/spl-token");
   const idl = require("../target/idl/wgrc_bridge.json");
   assert.equal(process.env.ANCHOR_PROVIDER_URL, DEVNET_URL, "Redemption requires the public Solana Devnet RPC.");
   const environment = AnchorProvider.env();
-  const provider = new AnchorProvider(environment.connection, environment.wallet, {
+  const connection = new Connection(DEVNET_URL, {
+    commitment: "finalized",
+    fetch: (input, init) => fetch(input, { ...init, signal: AbortSignal.timeout(30_000) }),
+  });
+  const provider = new AnchorProvider(connection, environment.wallet, {
     commitment: "finalized",
     preflightCommitment: "confirmed",
   });

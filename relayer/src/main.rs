@@ -99,6 +99,7 @@ fn node<T: DeserializeOwned>(script: &str, args: &[&str]) -> Result<T> {
 enum Action<'a> {
     ProcessDeposit(&'a str),
     ProcessRedemption(&'a str),
+    RecoverRedemptions { once: bool },
     WatchGridcoin { height: i64, once: bool, mint: bool },
     WatchSolana { once: bool },
 }
@@ -111,6 +112,12 @@ fn run() -> Result<()> {
                 && txid.len() == 64
                 && txid.bytes().all(|byte| byte.is_ascii_hexdigit()) => Action::ProcessDeposit(txid),
         [command, address] if command == "process-redemption" => Action::ProcessRedemption(address),
+        [command, flags @ ..]
+            if command == "recover-redemptions"
+                && (flags.is_empty() || (flags.len() == 1 && flags[0] == "--once")) =>
+        {
+            Action::RecoverRedemptions { once: !flags.is_empty() }
+        }
         [command, height, flags @ ..] if command == "watch-gridcoin" => {
             let height: u32 = height.parse().map_err(|_| "Expected a nonnegative block height")?;
             let mut once = false;
@@ -130,17 +137,19 @@ fn run() -> Result<()> {
         {
             Action::WatchSolana { once: !flags.is_empty() }
         }
-        _ => return Err("Usage: wgrc-relayer process-deposit TXID | process-redemption WITHDRAWAL_ADDRESS | watch-gridcoin START_HEIGHT [--once] [--mint] | watch-solana [--once]".into()),
+        _ => return Err("Usage: wgrc-relayer process-deposit TXID | process-redemption WITHDRAWAL_ADDRESS | recover-redemptions [--once] | watch-gridcoin START_HEIGHT [--once] [--mint] | watch-solana [--once]".into()),
     };
     let bridge_config = match fs::read(DEV_CONFIG) {
         Ok(content) => Some(content),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
         Err(error) => return Err(format!("Cannot read {DEV_CONFIG}: {error}").into()),
     };
-    let mut db = database_config(bridge_config.as_deref())?
-        .connect(MakeTlsConnector::new(TlsConnector::new()?))?;
+    let config = database_config(bridge_config.as_deref())?;
+    let connect = || -> Result<Client> {
+        Ok(config.connect(MakeTlsConnector::new(TlsConnector::new()?))?)
+    };
     if let Action::WatchSolana { once } = action {
-        return solana_watcher::watch(&mut db, once);
+        return solana_watcher::watch(&mut connect()?, once);
     }
     let settings: BridgeSettings = match bridge_config.as_deref() {
         Some(content) => serde_json::from_slice(content)
@@ -165,17 +174,22 @@ fn run() -> Result<()> {
             } else {
                 None
             };
-            gridcoin_watcher::watch(&mut db, &reserve, &minimum, height, once, automatic_mint)
+            gridcoin_watcher::watch(&mut connect()?, &reserve, &minimum, height, once, automatic_mint)
         }
         Action::ProcessDeposit(txid) => {
             let mint = settings.wgrc_mint_address.or(defaults.wgrc_mint_address)
                 .ok_or("Missing wGRC mint address")?;
-            process_deposit(&mut db, &reserve, &minimum, txid, &mint, None)
+            process_deposit(&mut connect()?, &reserve, &minimum, txid, &mint, None)
         }
         Action::ProcessRedemption(address) => {
             let mint = settings.wgrc_mint_address.or(defaults.wgrc_mint_address)
                 .ok_or("Missing wGRC mint address")?;
-            redemption::process(&mut db, &reserve, &minimum, &mint, address)
+            redemption::process(&mut connect()?, &reserve, &minimum, &mint, address)
+        }
+        Action::RecoverRedemptions { once } => {
+            let mint = settings.wgrc_mint_address.or(defaults.wgrc_mint_address)
+                .ok_or("Missing wGRC mint address")?;
+            redemption::recover(connect, &reserve, &minimum, &mint, once)
         }
         Action::WatchSolana { .. } => unreachable!("Solana watcher handled above"),
     }

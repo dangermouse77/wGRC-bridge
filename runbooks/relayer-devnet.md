@@ -251,6 +251,35 @@ settlement timestamp. A rerun should retain those same IDs and timestamp.
 If a settlement response was lost, the on-chain escrow status can recover
 the database record even when its Solana signature is unavailable.
 
+## Recover unfinished redemptions automatically
+
+After preparing a payout with `process-redemption`, start the recovery worker
+on `solchain` from the repository root. Export the same Gridcoin reserve RPC
+credentials, Devnet URL, and mint operator wallet used for the payout.
+
+```bash
+cargo run -p wgrc-relayer -- recover-redemptions
+```
+
+The worker looks for the configured reserve's unfinished payout in PostgreSQL
+every 15 seconds. It uses the saved signed transaction and settles the same
+escrow when Gridcoin reaches the required confirmation depth. On errors it
+reconnects and retries with delays of 15, 30, 60, and at most 120 seconds.
+If the worker stops, restart it with the same config and database. It
+resumes from the saved payout. Use `--once` for a single recovery pass.
+
+Start each new payout with `process-redemption` and its explicit withdrawal
+address. The worker processes existing payout records only. Repeated
+conflicts with the saved payout or on-chain withdrawal require reconciliation.
+
+For the live recovery check, start a fresh test redemption and record the
+Gridcoin transaction ID once the processor reports `awaiting_confirmations`.
+Start the recovery worker, stop it with Ctrl+C while the payout is still
+confirming, then restart it. After the payout confirms, verify that the
+worker reports `settled` with the same transaction ID and that PostgreSQL
+contains one payout row for that withdrawal. Run a final `--once` pass and
+expect `No unfinished payout for the configured reserve.`
+
 ## Watch Gridcoin Testnet for deposits
 
 Apply the watcher migration once to `wgrcbridge_dev` with the database owner

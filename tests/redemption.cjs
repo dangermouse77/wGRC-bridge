@@ -59,13 +59,30 @@ test("broadcasts the saved bytes and waits for confirmations", async () => {
 });
 
 test("recovers a lost broadcast response by tracking the same transaction", async () => {
+  let broadcasts = 0;
   const rpc = async (method, id) => {
+    if (method === "sendrawtransaction") {
+      assert.equal(id, payout.signedHex);
+      broadcasts++;
+      throw new Error("Broadcast response timed out");
+    }
     assert.deepEqual([method, id], ["getrawtransaction", txid]);
+    if (broadcasts === 0) throw missing;
     return { txid, confirmations: 9, blockhash };
   };
+  await assert.rejects(advancePayout(rpc, payout, 10, pending, unexpected), /timed out/);
   assert.deepEqual(await advancePayout(rpc, payout, 10, pending, unexpected), {
     txid, confirmations: 9, blockHash: null, signature: null,
   });
+  assert.equal(broadcasts, 1);
+});
+
+test("a transient lookup failure leaves the saved payout eligible for retry", async () => {
+  const rpc = async (method, id) => {
+    assert.deepEqual([method, id], ["getrawtransaction", txid]);
+    throw new Error("Gridcoin RPC temporarily unavailable");
+  };
+  await assert.rejects(advancePayout(rpc, payout, 10, pending, unexpected), /temporarily unavailable/);
 });
 
 test("settles a confirmed payout and recovers a lost settlement response", async () => {

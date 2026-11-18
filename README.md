@@ -554,7 +554,8 @@ PostgreSQL held one relayer payout row for the withdrawal.
 - [x] Verify automatic mint processing and replay protection on Devnet.
 - [x] Implement Testnet payout preparation, recovery, and Devnet escrow settlement.
 - [x] Verify the full redemption flow on Gridcoin Testnet and Solana Devnet.
-- [ ] Implement automatic retries and recovery for the relayer.
+- [x] Implement automatic retries and recovery for unfinished redemption payouts.
+- [ ] Verify redemption recovery after interrupting and restarting the worker.
 - [ ] Implement reserve reconciliation.
 
 ### Phase 4 — CLI and Integration Testing

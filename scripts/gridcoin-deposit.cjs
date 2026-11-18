@@ -111,7 +111,7 @@ async function connectTestnet(reserveAddress) {
     let reply;
     try {
       reply = JSON.parse(body, (key, entry, context) =>
-        key === "value" && typeof entry === "number" ? context.source : entry);
+        (key === "value" || key === "amount") && typeof entry === "number" ? context.source : entry);
     } catch (error) {
       if (!(error instanceof SyntaxError)) throw error;
       throw new Error(`${method}: Gridcoin RPC at ${endpoint.origin} returned HTTP ${response.status} without a JSON response.`);
@@ -125,7 +125,12 @@ async function connectTestnet(reserveAddress) {
   }
 
   if (await rpc("getblockhash", 0) !== TESTNET_GENESIS) throw new Error("Gridcoin Testnet required.");
-  const address = await rpc("validateaddress", reserveAddress);
+  const { address, script } = await resolveGridcoinAddress(rpc, reserveAddress);
+  return { rpc, endpoint, address, script };
+}
+
+async function resolveGridcoinAddress(rpc, destination) {
+  const address = await rpc("validateaddress", destination);
   if (!address.isvalid || !address.address) {
     throw new Error("Expected a valid Testnet P2PKH or P2SH reserve address.");
   }
@@ -136,7 +141,7 @@ async function connectTestnet(reserveAddress) {
   if (!/^(76a914[a-f0-9]{40}88ac|a914[a-f0-9]{40}87)$/.test(script ?? "")) {
     throw new Error("Expected a Testnet P2PKH or P2SH reserve script.");
   }
-  return { rpc, endpoint, address, script };
+  return { address, script };
 }
 
 async function main() {
@@ -224,7 +229,7 @@ async function main() {
   console.log(JSON.stringify({ ...record, signedHex }, null, 2));
 }
 
-module.exports = { baseUnits, deposit, confirmedDeposit, fundCarrier, connectTestnet, InvalidDeposit };
+module.exports = { baseUnits, deposit, confirmedDeposit, fundCarrier, connectTestnet, resolveGridcoinAddress, InvalidDeposit };
 if (require.main === module) {
   main().catch((error) => {
     console.error(error.message);

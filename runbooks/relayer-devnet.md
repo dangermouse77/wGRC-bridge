@@ -183,6 +183,74 @@ requests if no accounts changed. The row's observation slots should remain
 the same. Omit `--once` to scan every 15 seconds. The watcher records
 withdrawals. Gridcoin payouts and Solana settlement are separate operations.
 
+## Process a Devnet redemption
+
+Apply migration `004` once after the Solana watcher migration:
+
+```bash
+psql -X -W -h pg-bridge -p 5432 -d d_wgrcbridge_dev -U '<migration role>' \
+  -v ON_ERROR_STOP=1 -f relayer/migrations/004_redemption_payouts.sql
+```
+
+If the relayer has a separate database role, grant it `SELECT`, `INSERT`, and
+`UPDATE` on `wgrc.redemption_payouts`. Configure Gridcoin RPC for the
+dedicated Testnet reserve wallet, with staking disabled. The wallet must be
+able to sign the first time the payout is prepared. Use only the configured
+reserve address for inputs and change. The payout fee defaults to 0.001 GRC
+and can be set before preparation with `WGRC_PAYOUT_FEE_BASE_UNITS`. Fund
+fees separately with a plain Gridcoin transfer to the reserve.
+
+Create a small escrow withdrawal from the repository root using the holder's
+Devnet keypair and a Gridcoin Testnet receiving address that you control.
+Use an address other than the reserve and keep enough Devnet SOL to create
+the escrow accounts.
+
+```bash
+export ANCHOR_PROVIDER_URL=https://api.devnet.solana.com
+export ANCHOR_WALLET='<absolute path to the Devnet holder keypair>'
+node scripts/request-devnet-withdrawal.cjs '<Testnet payout address>' 1
+./bin/verify_solana_watcher.sh
+```
+
+Save the returned withdrawal address. If the request submission times out,
+look up the printed address on Devnet before creating another request.
+Switch `ANCHOR_WALLET` to the configured Devnet mint operator keypair
+before processing the payout.
+
+```bash
+export ANCHOR_WALLET='<absolute path to the Devnet mint operator keypair>'
+bash bin/process_redemption.sh '<withdrawal address>'
+```
+
+The first run saves the signed payout before broadcasting. It reports
+`awaiting_confirmations` until the exact payout reaches the shared Gridcoin
+threshold. Rerun the same command with the same withdrawal address to
+advance it. It reuses the saved transaction across restarts and performs
+the escrow burn after the Gridcoin payout confirms.
+
+Keep one unfinished payout per reserve. Coordinate any settlement or
+cancellation through the operator managing this payout. If the signed
+transaction cannot confirm, keep its database record and reconcile it
+before considering a replacement or refund. A broadcast timeout, RPC
+error, or temporarily missing transaction cannot justify a refund.
+
+On `settled`, check that the Gridcoin recipient received the requested
+amount, then refresh the Solana watcher and verify both records:
+
+```sql
+SELECT w.withdrawal_address, w.amount_base_units, w.status,
+       w.gridcoin_payout_txid, p.txid, p.payout_block_hash,
+       p.settlement_signature, p.settled_at
+FROM wgrc.solana_withdrawals AS w
+JOIN wgrc.redemption_payouts AS p USING (withdrawal_address)
+WHERE w.withdrawal_address = '<withdrawal address>';
+```
+
+Expect `status = 'settled'`, matching Gridcoin transaction IDs, and a
+settlement timestamp. A rerun should retain those same IDs and timestamp.
+If a settlement response was lost, the on-chain escrow status can recover
+the database record even when its Solana signature is unavailable.
+
 ## Watch Gridcoin Testnet for deposits
 
 Apply the watcher migration once to `wgrcbridge_dev` with the database owner

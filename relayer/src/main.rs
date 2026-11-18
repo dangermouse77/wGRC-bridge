@@ -7,6 +7,7 @@ use std::{env, error::Error, fs, process::Command, time::Duration};
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
 mod gridcoin_watcher;
+mod redemption;
 mod solana_watcher;
 
 const DEV_CONFIG: &str = "relayer/bridge.dev.json";
@@ -97,6 +98,7 @@ fn node<T: DeserializeOwned>(script: &str, args: &[&str]) -> Result<T> {
 
 enum Action<'a> {
     ProcessDeposit(&'a str),
+    ProcessRedemption(&'a str),
     WatchGridcoin { height: i64, once: bool, mint: bool },
     WatchSolana { once: bool },
 }
@@ -108,6 +110,7 @@ fn run() -> Result<()> {
             if command == "process-deposit"
                 && txid.len() == 64
                 && txid.bytes().all(|byte| byte.is_ascii_hexdigit()) => Action::ProcessDeposit(txid),
+        [command, address] if command == "process-redemption" => Action::ProcessRedemption(address),
         [command, height, flags @ ..] if command == "watch-gridcoin" => {
             let height: u32 = height.parse().map_err(|_| "Expected a nonnegative block height")?;
             let mut once = false;
@@ -127,7 +130,7 @@ fn run() -> Result<()> {
         {
             Action::WatchSolana { once: !flags.is_empty() }
         }
-        _ => return Err("Usage: wgrc-relayer process-deposit TXID | watch-gridcoin START_HEIGHT [--once] [--mint] | watch-solana [--once]".into()),
+        _ => return Err("Usage: wgrc-relayer process-deposit TXID | process-redemption WITHDRAWAL_ADDRESS | watch-gridcoin START_HEIGHT [--once] [--mint] | watch-solana [--once]".into()),
     };
     let bridge_config = match fs::read(DEV_CONFIG) {
         Ok(content) => Some(content),
@@ -168,6 +171,11 @@ fn run() -> Result<()> {
             let mint = settings.wgrc_mint_address.or(defaults.wgrc_mint_address)
                 .ok_or("Missing wGRC mint address")?;
             process_deposit(&mut db, &reserve, &minimum, txid, &mint, None)
+        }
+        Action::ProcessRedemption(address) => {
+            let mint = settings.wgrc_mint_address.or(defaults.wgrc_mint_address)
+                .ok_or("Missing wGRC mint address")?;
+            redemption::process(&mut db, &reserve, &minimum, &mint, address)
         }
         Action::WatchSolana { .. } => unreachable!("Solana watcher handled above"),
     }

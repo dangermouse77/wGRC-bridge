@@ -546,7 +546,8 @@ the finalized deposit without submitting another mint.
 - [x] Verify the Solana watcher against live Devnet withdrawals.
 - [x] Connect Gridcoin deposit discovery to automatic Devnet mint processing.
 - [x] Verify automatic mint processing and replay protection on Devnet.
-- [ ] Implement redemption processing.
+- [x] Implement Testnet payout preparation, recovery, and Devnet escrow settlement.
+- [ ] Verify the full redemption flow on Gridcoin Testnet and Solana Devnet.
 - [ ] Implement automatic retries and recovery for the relayer.
 - [ ] Implement reserve reconciliation.
 

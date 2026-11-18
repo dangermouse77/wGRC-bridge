@@ -151,6 +151,19 @@ prompts for a password nor signs a transaction. `status` reports finalized
 bridge settings and capacity, not daemon health or proof of GRC backing.
 Operators use `reconcile-reserve` and service logs for those checks.
 
+For GRC awaiting minting, run `bash bin/wgrc supply --pending-deposits` with
+Gridcoin RPC connected to the **reserve wallet**. This optional read-only
+inspection prompts for the RPC password if needed and adds, for example,
+`Locked in pending deposits: 77 GRC`. It totals unspent valid bridge deposit
+outputs with no matching finalized Solana receipt, including unconfirmed
+outputs visible to that wallet. Ordinary reserve funding, minted deposits,
+and change are excluded. “Locked” here means held at the reserve awaiting
+minting, not a Gridcoin script-level lock. Spent deposit outputs and deposits
+not visible to the wallet are outside this figure, so it is not a complete
+audit of unpaid obligations. The cross-chain reads are observational, not an
+atomic snapshot. Retry if chain state changes during inspection.
+Plain `supply` stays password-free and labels pending deposits as not checked.
+
 The client interacts with Gridcoin RPC and the Solana bridge program.
 
 ## Gridcoin Deposit Protocol

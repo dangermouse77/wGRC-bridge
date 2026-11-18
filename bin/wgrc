@@ -9,7 +9,7 @@ User commands (Node.js; no relayer binary required):
   broadcast-deposit DEPOSIT_JSON_FILE   Retry the same saved transaction
   withdraw AMOUNT_WGRC --gridcoin-address ADDRESS [--nonce NONCE]
   status
-  supply
+  supply [--pending-deposits]    Optional reserve-wallet RPC inspection
 Bridge operator commands (compiled Rust relayer required):
   serve START_HEIGHT [--once] [--enable-payouts]
   watch-gridcoin START_HEIGHT [--once] [--mint]
@@ -27,8 +27,19 @@ HELP
 fi
 # Reject invalid user arguments before prompting for RPC credentials.
 case "$1" in
-  status|supply)
+  status)
     if (( $# != 1 )); then echo "Usage: wgrc $1" >&2; exit 1; fi ;;
+  supply)
+    if (( $# != 1 )) && { (( $# != 2 )) || [[ "$2" != --pending-deposits ]]; }; then
+      echo 'Usage: wgrc supply [--pending-deposits]' >&2; exit 1
+    fi
+    if (( $# == 2 )); then
+      if [[ -z ${GRC_RPC_PASSWORD:-} && ! -t 0 ]]; then
+        echo 'Set GRC_RPC_PASSWORD for reserve-wallet inspection.' >&2; exit 1
+      fi
+      source "$root/bin/deposit-common.sh"
+      export WGRC_TESTNET_RESERVE_ADDRESS="$reserve"
+    fi ;;
   withdraw)
     if (( $# != 4 && $# != 6 )) || [[ "$3" != --gridcoin-address ]] ||
        { (( $# == 6 )) && [[ "$5" != --nonce ]]; }; then
@@ -53,7 +64,7 @@ export ANCHOR_WALLET="${ANCHOR_WALLET:-$HOME/.config/solana/devnet.json}"
 cd -- "$root"
 case "$1" in
   status) exec node scripts/bridge-status.cjs ;;
-  supply) exec node scripts/supply.cjs ;;
+  supply) shift; exec node scripts/supply.cjs "$@" ;;
   withdraw)
     if [[ "$4" == "$reserve" ]]; then
       echo 'Use a Gridcoin Testnet payout address outside the bridge reserve.' >&2; exit 1

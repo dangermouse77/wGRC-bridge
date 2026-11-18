@@ -127,6 +127,7 @@ enum Action<'a> {
     RecoverCancellations,
     RecoverRedemptions { once: bool },
     ReconcileReserve,
+    PayoutRecords,
     WatchGridcoin { height: i64, once: bool, mint: bool },
     WatchSolana { once: bool },
 }
@@ -143,6 +144,7 @@ fn run() -> Result<()> {
         [command] if command == "process-redemptions" => Action::ProcessRedemptions,
         [command] if command == "recover-cancellations" => Action::RecoverCancellations,
         [command] if command == "reconcile-reserve" => Action::ReconcileReserve,
+        [command] if command == "payout-records" => Action::PayoutRecords,
         [command, flags @ ..]
             if command == "recover-redemptions"
                 && (flags.is_empty() || (flags.len() == 1 && flags[0] == "--once")) =>
@@ -200,6 +202,7 @@ fn run() -> Result<()> {
     let minimum = env::var("WGRC_MIN_CONFIRMATIONS")
         .unwrap_or_else(|_| include_str!("../gridcoin-min-confirmations.txt").trim().into());
     match action {
+        Action::PayoutRecords => reconciliation::payout_records(&mut connect()?, &reserve, &minimum),
         Action::WatchGridcoin { height, once, mint } => {
             let mint_address = settings.wgrc_mint_address.or(defaults.wgrc_mint_address);
             let automatic_mint = if mint {

@@ -9,7 +9,8 @@ User commands (Node.js; no relayer binary required):
   broadcast-deposit DEPOSIT_JSON_FILE   Retry the same saved transaction
   withdraw AMOUNT_WGRC --gridcoin-address ADDRESS [--nonce NONCE]
   status
-  supply [--pending-deposits]    Optional reserve-wallet RPC inspection
+  supply [--pending-deposits] [--pending-payouts]
+    --pending-payouts requires the relayer binary and database access
 Bridge operator commands (compiled Rust relayer required):
   serve START_HEIGHT [--once] [--enable-payouts]
   watch-gridcoin START_HEIGHT [--once] [--mint]
@@ -30,10 +31,19 @@ case "$1" in
   status)
     if (( $# != 1 )); then echo "Usage: wgrc $1" >&2; exit 1; fi ;;
   supply)
-    if (( $# != 1 )) && { (( $# != 2 )) || [[ "$2" != --pending-deposits ]]; }; then
-      echo 'Usage: wgrc supply [--pending-deposits]' >&2; exit 1
+    pending_deposits=false
+    pending_payouts=false
+    for option in "${@:2}"; do
+      case "$option" in
+        --pending-deposits) if "$pending_deposits"; then exit 1; fi; pending_deposits=true ;;
+        --pending-payouts) if "$pending_payouts"; then exit 1; fi; pending_payouts=true ;;
+        *) echo 'Usage: wgrc supply [--pending-deposits] [--pending-payouts]' >&2; exit 1 ;;
+      esac
+    done
+    if "$pending_payouts" && [[ ! -x "${WGRC_RELAYER_BIN:-$root/target/release/wgrc-relayer}" ]]; then
+      echo 'Build the relayer first: cargo build --release -p wgrc-relayer' >&2; exit 1
     fi
-    if (( $# == 2 )); then
+    if (( $# > 1 )); then
       if [[ -z ${GRC_RPC_PASSWORD:-} && ! -t 0 ]]; then
         echo 'Set GRC_RPC_PASSWORD for reserve-wallet inspection.' >&2; exit 1
       fi

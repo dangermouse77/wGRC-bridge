@@ -164,6 +164,18 @@ audit of unpaid obligations. The cross-chain reads are observational, not an
 atomic snapshot. Retry if chain state changes during inspection.
 Plain `supply` stays password-free and labels pending deposits as not checked.
 
+Operators can also run `bash bin/wgrc supply --pending-payouts`, or combine
+both flags, to display `GRC payouts awaiting confirmation: 1 GRC`.
+This requires the updated compiled relayer, configured PostgreSQL access, and
+Gridcoin Testnet RPC. It reads unfinished payout records, matches finalized
+Solana withdrawals, validates payout outputs, and totals observed payments
+below the configured confirmation threshold. Fees are excluded. Confirmed
+payments awaiting Solana settlement are not counted in this line, even while
+their wGRC remains escrowed. Saved transactions not found on Gridcoin are
+reported separately as unknown, not assumed broadcast. No payouts or
+settlements are submitted by this report. The figure is an observational
+snapshot of recorded payouts, not a complete reserve audit.
+
 The client interacts with Gridcoin RPC and the Solana bridge program.
 
 ## Gridcoin Deposit Protocol

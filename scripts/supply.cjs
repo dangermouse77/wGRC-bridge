@@ -10,10 +10,22 @@ function formatAmount(amount, decimals) {
 
 async function main() {
   const args = process.argv.slice(2);
-  if (args.length && (args.length !== 1 || args[0] !== "--pending-deposits")) {
-    throw new Error("Usage: supply.cjs [--pending-deposits]");
+  if (new Set(args).size !== args.length || args.some((arg) => !["--pending-deposits", "--pending-payouts"].includes(arg))) {
+    throw new Error("Usage: supply.cjs [--pending-deposits] [--pending-payouts]");
   }
-  const includePending = args.length === 1;
+  const includePending = args.includes("--pending-deposits");
+  const includePayouts = args.includes("--pending-payouts");
+  let payoutRecords;
+  if (includePayouts) {
+    const { promisify } = require("node:util");
+    const { execFile } = require("node:child_process");
+    const { resolve } = require("node:path");
+    const { stdout } = await promisify(execFile)(
+      process.env.WGRC_RELAYER_BIN || resolve("target/release/wgrc-relayer"), ["payout-records"],
+      { timeout: 45000, maxBuffer: 4 * 1024 * 1024 },
+    );
+    payoutRecords = JSON.parse(stdout);
+  }
   const idl = require("../target/idl/wgrc_bridge.json");
   const connection = new Connection(
     process.env.ANCHOR_PROVIDER_URL ?? "https://api.devnet.solana.com",
@@ -47,7 +59,8 @@ async function main() {
   let minted = 0n;
   let locked = 0n;
   const receipts = new Map();
-  for (const { account: { data } } of snapshot.value) {
+  const withdrawals = new Map();
+  for (const { pubkey, account: { data } } of snapshot.value) {
     if (data.subarray(0, receiptTag.length).equals(receiptTag)) {
       const receipt = coder.accounts.decode("depositReceipt", data);
       minted += BigInt(receipt.amount.toString());
@@ -56,6 +69,8 @@ async function main() {
       });
     } else if (data.subarray(0, escrowTag.length).equals(escrowTag)) {
       const withdrawal = coder.accounts.decode("escrowWithdrawal", data);
+      withdrawals.set(pubkey.toBase58(), { amount: withdrawal.amount.toString(),
+        destination: withdrawal.gridcoinAddress, status: Object.keys(withdrawal.status)[0] });
       if (Object.hasOwn(withdrawal.status, "pending")) {
         locked += BigInt(withdrawal.amount.toString());
       }
@@ -66,14 +81,25 @@ async function main() {
   }
 
   let pending;
-  if (includePending) {
-    const { connectTestnet, deposit, InvalidDeposit } = require("./gridcoin-deposit.cjs");
+  let payouts;
+  if (includePending || includePayouts) {
+    const { connectTestnet, deposit, InvalidDeposit, resolveGridcoinAddress } = require("./gridcoin-deposit.cjs");
     const reserveAddress = process.env.WGRC_TESTNET_RESERVE_ADDRESS;
     if (!reserveAddress) throw new Error("Set WGRC_TESTNET_RESERVE_ADDRESS or use wgrc supply --pending-deposits.");
     const reserve = await connectTestnet(reserveAddress);
-    pending = await require("./pending-deposits.cjs").pendingDeposits(
+    if (includePending) pending = await require("./pending-deposits.cjs").pendingDeposits(
       reserve.rpc, reserve, receipts, deposit, InvalidDeposit,
     );
+    if (includePayouts) {
+      const { findPayout, validateOutputs } = require("../relayer/redeem-devnet.cjs");
+      const tip = await reserve.rpc("getbestblockhash");
+      payouts = await require("./pending-payouts.cjs").pendingPayouts(payoutRecords, withdrawals,
+        (txid) => findPayout(reserve.rpc, txid), async (tx, payout) => {
+          const destination = await resolveGridcoinAddress(reserve.rpc, payout.gridcoinAddress);
+          validateOutputs(tx, destination.script, reserve.script, BigInt(payout.amountBaseUnits));
+        });
+      if (await reserve.rpc("getbestblockhash") !== tip) throw new Error("Gridcoin tip changed during payout inspection. Retry.");
+    }
     const latest = await connection.getAccountInfoAndContext(mint, {
       commitment: "finalized", minContextSlot: after.context.slot,
     });
@@ -97,6 +123,10 @@ async function main() {
     ? `Locked in pending deposits: ${formatAmount(pending.total, 8)} GRC (${pending.total} base units; ${pending.count} unspent deposits)`
     : "Locked in pending deposits: not checked (use --pending-deposits with reserve-wallet RPC)");
   if (pending) console.log(`Gridcoin snapshot tip: ${pending.tip}; includes unconfirmed deposits visible to the wallet.`);
+  console.log(payouts
+    ? `GRC payouts awaiting confirmation: ${formatAmount(payouts.total, 8)} GRC (${payouts.count} payouts; fewer than ${payouts.minimum} confirmations)`
+    : "GRC payouts awaiting confirmation: not checked (use --pending-payouts)");
+  if (payouts?.unobserved) console.log(`Saved payouts not found on Gridcoin: ${payouts.unobserved} (excluded; broadcast status unknown, inspect recovery).`);
 }
 
 main().catch((error) => {

@@ -23,8 +23,21 @@ Omit `--once` for continuous operation. Each cycle runs Gridcoin discovery and
 minting, Solana discovery, saved payout recovery, and cancellation recovery.
 Reconciliation runs on the first cycle and then approximately every five
 minutes. Successful cycles wait 15 seconds; failures increase that delay up
-to 120 seconds. Commands run sequentially. A slow catch-up scan delays the
-remaining steps; this version favors simple ordering over parallel throughput.
+to 120 seconds. Commands run sequentially. Gridcoin scanning is limited to
+50 block/rewind steps per cycle by default, followed by discovered-deposit
+minting and the withdrawal steps even when historical catch-up is incomplete.
+Set `WGRC_GRIDCOIN_BATCH_SIZE` to an integer from 1 to 10000 to change this.
+Every scanned block retains its normal committed checkpoint; no blocks are
+skipped. A batch boundary is not evidence that the watcher is caught up.
+This bounds scan work, not total cycle time: RPC latency and pending mint
+processing can still lengthen a cycle.
+
+For example, `WGRC_GRIDCOIN_BATCH_SIZE=20 bash bin/wgrc serve 3339204
+--enable-payouts` uses 20-block batches. Standalone `watch-gridcoin` retains
+its full catch-up behavior unless given `--max-blocks N`; with `--once` it
+returns after that batch and its mint attempts. Rebuild the relayer before
+restarting the updated service. No database migration or checkpoint reset is
+needed.
 
 New payouts remain disabled by default. For a deliberate Devnet queue test:
 

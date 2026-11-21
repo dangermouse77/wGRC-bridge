@@ -128,7 +128,7 @@ enum Action<'a> {
     RecoverRedemptions { once: bool },
     ReconcileReserve,
     PayoutRecords,
-    WatchGridcoin { height: i64, once: bool, mint: bool },
+    WatchGridcoin { height: i64, once: bool, mint: bool, max_blocks: Option<u32> },
     WatchSolana { once: bool },
 }
 
@@ -155,14 +155,24 @@ fn run() -> Result<()> {
             let height: u32 = height.parse().map_err(|_| "Expected a nonnegative block height")?;
             let mut once = false;
             let mut mint = false;
-            for flag in flags {
+            let mut max_blocks = None;
+            let mut flags = flags.iter();
+            while let Some(flag) = flags.next() {
                 match flag.as_str() {
                     "--once" if !once => once = true,
                     "--mint" if !mint => mint = true,
+                    "--max-blocks" if max_blocks.is_none() => {
+                        let limit: u32 = flags.next().ok_or("Missing --max-blocks value")?
+                            .parse().map_err(|_| "Expected --max-blocks between 1 and 10000")?;
+                        if !(1..=10000).contains(&limit) {
+                            return Err("Expected --max-blocks between 1 and 10000".into());
+                        }
+                        max_blocks = Some(limit);
+                    }
                     _ => return Err(format!("Unexpected watch-gridcoin option: {flag}").into()),
                 }
             }
-            Action::WatchGridcoin { height: i64::from(height), once, mint }
+            Action::WatchGridcoin { height: i64::from(height), once, mint, max_blocks }
         }
         [command, flags @ ..]
             if command == "watch-solana"
@@ -170,7 +180,7 @@ fn run() -> Result<()> {
         {
             Action::WatchSolana { once: !flags.is_empty() }
         }
-        _ => return Err("Usage: wgrc-relayer process-deposit TXID | process-redemption WITHDRAWAL_ADDRESS | cancel-redemption WITHDRAWAL_ADDRESS | process-redemptions | recover-cancellations | recover-redemptions [--once] | reconcile-reserve | watch-gridcoin START_HEIGHT [--once] [--mint] | watch-solana [--once]".into()),
+        _ => return Err("Usage: wgrc-relayer process-deposit TXID | process-redemption WITHDRAWAL_ADDRESS | cancel-redemption WITHDRAWAL_ADDRESS | process-redemptions | recover-cancellations | recover-redemptions [--once] | reconcile-reserve | watch-gridcoin START_HEIGHT [--once] [--mint] [--max-blocks N] | watch-solana [--once]".into()),
     };
     let bridge_config = match fs::read(DEV_CONFIG) {
         Ok(content) => Some(content),
@@ -203,14 +213,14 @@ fn run() -> Result<()> {
         .unwrap_or_else(|_| include_str!("../gridcoin-min-confirmations.txt").trim().into());
     match action {
         Action::PayoutRecords => reconciliation::payout_records(&mut connect()?, &reserve, &minimum),
-        Action::WatchGridcoin { height, once, mint } => {
+        Action::WatchGridcoin { height, once, mint, max_blocks } => {
             let mint_address = settings.wgrc_mint_address.or(defaults.wgrc_mint_address);
             let automatic_mint = if mint {
                 Some(mint_address.as_deref().ok_or("Missing wGRC mint address")?)
             } else {
                 None
             };
-            gridcoin_watcher::watch(&mut connect()?, &reserve, &minimum, height, once, automatic_mint)
+            gridcoin_watcher::watch(&mut connect()?, &reserve, &minimum, height, once, automatic_mint, max_blocks)
         }
         Action::ProcessDeposit(txid) => {
             let mint = settings.wgrc_mint_address.or(defaults.wgrc_mint_address)

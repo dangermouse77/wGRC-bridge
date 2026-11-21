@@ -32,10 +32,11 @@ pub fn watch(
     start: i64,
     once: bool,
     mint: Option<&str>,
+    max_blocks: Option<u32>,
 ) -> Result<()> {
     loop {
-        if scan_next(db, reserve, minimum, start)? {
-            continue;
+        if scan_batch(max_blocks, || scan_next(db, reserve, minimum, start))? {
+            eprintln!("Gridcoin scan batch limit reached; checkpoint saved. Remaining blocks will be scanned on the next batch.");
         }
         if let Some(mint) = mint {
             let failures = mint_discoveries(db, reserve, minimum, mint)?;
@@ -47,6 +48,45 @@ pub fn watch(
             return Ok(());
         }
         thread::sleep(Duration::from_secs(15));
+    }
+}
+
+// Count both scanned blocks and rewind steps so a reorg cannot monopolize a
+// service cycle. scan_next commits each checkpoint before returning true.
+fn scan_batch(limit: Option<u32>, mut next: impl FnMut() -> Result<bool>) -> Result<bool> {
+    let mut steps = 0u32;
+    loop {
+        if limit.is_some_and(|limit| steps >= limit) { return Ok(true); }
+        if !next()? { return Ok(false); }
+        if limit.is_some() { steps += 1; }
+    }
+}
+
+#[cfg(test)]
+mod batch_tests {
+    use super::*;
+
+    #[test]
+    fn bounds_catch_up_and_resumes_without_skipping() {
+        let mut checkpoint = 100;
+        for expected in [150, 200] {
+            assert!(scan_batch(Some(50), || { checkpoint += 1; Ok(true) }).unwrap());
+            assert_eq!(checkpoint, expected);
+        }
+    }
+
+    #[test]
+    fn stops_when_caught_up_and_preserves_unbounded_mode() {
+        for limit in [None, Some(50)] {
+            let mut calls = 0;
+            assert!(!scan_batch(limit, || { calls += 1; Ok(calls <= 3) }).unwrap());
+            assert_eq!(calls, 4);
+        }
+    }
+
+    #[test]
+    fn propagates_failure_without_treating_it_as_a_completed_batch() {
+        assert!(scan_batch(Some(50), || Err("reorg requires reconciliation".into())).is_err());
     }
 }
 

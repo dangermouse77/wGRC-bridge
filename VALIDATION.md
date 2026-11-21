@@ -178,6 +178,17 @@ cancellation/payout races, or the new worker timeout behavior under live faults.
 
 ## Validation milestones
 
+### Bounded Gridcoin catch-up
+
+The service defaults to 50 scan steps per cycle and then runs the withdrawal
+steps. Mocked service tests cover custom batch sizes, interleaving, unchanged
+start height, and invalid settings. Rust unit tests cover batch limits,
+resuming without skipping, catch-up completion, and error propagation.
+Run `node --test tests/service.cjs` and
+`cargo test -p wgrc-relayer batch_tests` before deployment. Live verification
+should confirm `watch-solana` and payout recovery run between historical scan
+batches while checkpoint heights continue advancing. This live test is pending.
+
 Completion states below were moved from the README without changing their status.
 
 ### Phase 1 — Solana Smart Contract

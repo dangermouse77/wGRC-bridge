@@ -544,7 +544,10 @@ The initial unified CLI and service runner are implemented. Build with
 `bash bin/wgrc serve 3339204 --once` for one cycle, or omit `--once` for
 continuous operation. Use the reserve's existing start height. The service
 coordinates discovery, minting, payout and cancellation recovery, and periodic
-reconciliation. New payouts require explicit `--enable-payouts` and should stay
+reconciliation. Gridcoin scans yield after 50 block/rewind steps per cycle
+(configurable with `WGRC_GRIDCOIN_BATCH_SIZE`) so catch-up does not occupy
+the entire scan phase until the chain tip is reached. Checkpoints are preserved.
+New payouts require explicit `--enable-payouts` and should stay
 disabled for unattended operation until the live concurrency checks pass.
 See [bridge service operations](docs/bridge-service.md) for the systemd
 template, configuration, shutdown behavior, and live validation procedure.

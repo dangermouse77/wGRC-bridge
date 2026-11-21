@@ -1,14 +1,18 @@
 const { spawn } = require("node:child_process");
 const { resolve } = require("node:path");
 
-function options(args) {
+function options(args, env = process.env) {
   const [height, ...flags] = args;
   if (!/^\d+$/.test(height ?? "") || Number(height) > 0xffffffff
       || new Set(flags).size !== flags.length
       || flags.some((flag) => !["--once", "--enable-payouts"].includes(flag))) {
     throw new Error("Usage: wgrc serve START_HEIGHT [--once] [--enable-payouts]");
   }
-  return { height, once: flags.includes("--once"), payouts: flags.includes("--enable-payouts") };
+  const batch = env.WGRC_GRIDCOIN_BATCH_SIZE ?? "50";
+  if (!/^\d+$/.test(batch) || Number(batch) < 1 || Number(batch) > 10000) {
+    throw new Error("WGRC_GRIDCOIN_BATCH_SIZE must be an integer between 1 and 10000.");
+  }
+  return { height, batchSize: String(Number(batch)), once: flags.includes("--once"), payouts: flags.includes("--enable-payouts") };
 }
 
 async function cycle(config, run, stopping = () => false, reconcile = true) {
@@ -19,7 +23,7 @@ async function cycle(config, run, stopping = () => false, reconcile = true) {
     healthy = success && healthy;
     return success;
   }
-  const gridcoin = await step(["watch-gridcoin", config.height, "--once", "--mint"]);
+  const gridcoin = await step(["watch-gridcoin", config.height, "--once", "--mint", "--max-blocks", config.batchSize]);
   const solana = await step(["watch-solana", "--once"]);
   // Recovery remains available even when a watcher is temporarily unavailable.
   const recovery = await step(["recover-redemptions", "--once"]);

@@ -13,7 +13,7 @@ User commands (Node.js; no relayer binary required):
     --pending-payouts requires the relayer binary and database access
 Bridge operator commands (compiled Rust relayer required):
   serve START_HEIGHT [--once] [--enable-payouts]
-  watch-gridcoin START_HEIGHT [--once] [--mint]
+  watch-gridcoin START_HEIGHT [--once] [--mint] [--max-blocks N]
   watch-solana [--once]
   process-deposit TXID
   process-redemption WITHDRAWAL_ADDRESS
@@ -23,6 +23,7 @@ Bridge operator commands (compiled Rust relayer required):
   recover-cancellations
   reconcile-reserve
 Build first: cargo build --release -p wgrc-relayer
+Service scan batch: WGRC_GRIDCOIN_BATCH_SIZE (default 50; range 1-10000)
 HELP
   exit 0
 fi

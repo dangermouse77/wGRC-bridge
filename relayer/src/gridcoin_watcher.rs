@@ -29,11 +29,23 @@ pub fn watch(
     db: &mut Client,
     reserve: &str,
     minimum: &str,
-    start: i64,
+    start: Option<i64>,
     once: bool,
     mint: Option<&str>,
     max_blocks: Option<u32>,
 ) -> Result<()> {
+    let saved = db.query_one(
+        "SELECT min(height), max(height) FROM wgrc.gridcoin_blocks WHERE reserve_address = $1",
+        &[&reserve],
+    )?;
+    let first: Option<i64> = saved.get(0);
+    let last: Option<i64> = saved.get(1);
+    let start = resolve_start(start, first)?;
+    if let Some(last) = last {
+        eprintln!("Gridcoin checkpoint: last scanned {last}; next height {}; original start {start}.", last + 1);
+    } else {
+        eprintln!("No saved Gridcoin checkpoint; starting at explicitly selected height {start}.");
+    }
     loop {
         if scan_batch(max_blocks, || scan_next(db, reserve, minimum, start))? {
             eprintln!("Gridcoin scan batch limit reached; checkpoint saved. Remaining blocks will be scanned on the next batch.");
@@ -51,6 +63,16 @@ pub fn watch(
     }
 }
 
+fn resolve_start(requested: Option<i64>, saved: Option<i64>) -> Result<i64> {
+    match (requested, saved) {
+        (Some(requested), Some(saved)) if requested != saved =>
+            Err(format!("Reserve originally started at {saved}. Omit the service height to resume automatically; do not pass the current chain tip.").into()),
+        (_, Some(saved)) => Ok(saved),
+        (Some(requested), None) => Ok(requested),
+        (None, None) => Err("No Gridcoin checkpoint for this reserve. On first use, supply an explicit start height that includes all intended deposits.".into()),
+    }
+}
+
 // Count both scanned blocks and rewind steps so a reorg cannot monopolize a
 // service cycle. scan_next commits each checkpoint before returning true.
 fn scan_batch(limit: Option<u32>, mut next: impl FnMut() -> Result<bool>) -> Result<bool> {
@@ -65,6 +87,15 @@ fn scan_batch(limit: Option<u32>, mut next: impl FnMut() -> Result<bool>) -> Res
 #[cfg(test)]
 mod batch_tests {
     use super::*;
+
+    #[test]
+    fn resumes_saved_origin_and_requires_explicit_first_start() {
+        assert_eq!(resolve_start(None, Some(3339204)).unwrap(), 3339204);
+        assert_eq!(resolve_start(Some(3339204), Some(3339204)).unwrap(), 3339204);
+        assert!(resolve_start(Some(3343624), Some(3339204)).is_err());
+        assert!(resolve_start(None, None).is_err());
+        assert_eq!(resolve_start(Some(0), None).unwrap(), 0);
+    }
 
     #[test]
     fn bounds_catch_up_and_resumes_without_skipping() {

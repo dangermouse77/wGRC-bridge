@@ -2,11 +2,13 @@ const { spawn } = require("node:child_process");
 const { resolve } = require("node:path");
 
 function options(args, env = process.env) {
-  const [height, ...flags] = args;
-  if (!/^\d+$/.test(height ?? "") || Number(height) > 0xffffffff
+  const explicit = args.length > 0 && !args[0].startsWith("--");
+  const height = explicit ? args[0] : "auto";
+  const flags = explicit ? args.slice(1) : args;
+  if ((height !== "auto" && (!/^\d+$/.test(height) || Number(height) > 0xffffffff))
       || new Set(flags).size !== flags.length
       || flags.some((flag) => !["--once", "--enable-payouts"].includes(flag))) {
-    throw new Error("Usage: wgrc serve START_HEIGHT [--once] [--enable-payouts]");
+    throw new Error("Usage: wgrc serve [START_HEIGHT] [--once] [--enable-payouts]");
   }
   const batch = env.WGRC_GRIDCOIN_BATCH_SIZE ?? "50";
   if (!/^\d+$/.test(batch) || Number(batch) < 1 || Number(batch) > 10000) {

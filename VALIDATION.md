@@ -180,6 +180,10 @@ cancellation/payout races, or the new worker timeout behavior under live faults.
 
 ### Bounded Gridcoin catch-up
 
+Automatic resume is covered by a mocked service test for omitted height and a
+Rust unit test for saved origins, explicit first starts, and mismatched heights.
+Live confirmation of the new no-height startup remains pending.
+
 The service defaults to 50 scan steps per cycle and then runs the withdrawal
 steps. Mocked service tests cover custom batch sizes, interleaving, unchanged
 start height, and invalid settings. Rust unit tests cover batch limits,

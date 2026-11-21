@@ -128,7 +128,7 @@ enum Action<'a> {
     RecoverRedemptions { once: bool },
     ReconcileReserve,
     PayoutRecords,
-    WatchGridcoin { height: i64, once: bool, mint: bool, max_blocks: Option<u32> },
+    WatchGridcoin { height: Option<i64>, once: bool, mint: bool, max_blocks: Option<u32> },
     WatchSolana { once: bool },
 }
 
@@ -152,7 +152,9 @@ fn run() -> Result<()> {
             Action::RecoverRedemptions { once: !flags.is_empty() }
         }
         [command, height, flags @ ..] if command == "watch-gridcoin" => {
-            let height: u32 = height.parse().map_err(|_| "Expected a nonnegative block height")?;
+            let height = if height == "auto" { None } else {
+                Some(i64::from(height.parse::<u32>().map_err(|_| "Expected a nonnegative block height or auto")?))
+            };
             let mut once = false;
             let mut mint = false;
             let mut max_blocks = None;
@@ -172,7 +174,7 @@ fn run() -> Result<()> {
                     _ => return Err(format!("Unexpected watch-gridcoin option: {flag}").into()),
                 }
             }
-            Action::WatchGridcoin { height: i64::from(height), once, mint, max_blocks }
+            Action::WatchGridcoin { height, once, mint, max_blocks }
         }
         [command, flags @ ..]
             if command == "watch-solana"

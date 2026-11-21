@@ -72,7 +72,15 @@ test("a later cycle resumes normal processing after a failure", async () => {
 });
 
 test("service rejects missing heights and unsupported or duplicate flags", () => {
-  for (const args of [[], ["-1"], ["4294967296"], ["1", "--mint"], ["1", "--once", "--once"]]) {
+  for (const args of [["-1"], ["4294967296"], ["1", "--mint"], ["1", "--once", "--once"]]) {
     assert.throws(() => options(args), /Usage/);
   }
+});
+
+test("service resumes automatically when the height is omitted", async () => {
+  assert.equal(options([]).height, "auto");
+  const commands = [];
+  await cycle(options(["--once", "--enable-payouts"]), async (args) => { commands.push(args); return true; });
+  assert.deepEqual(commands[0], ["watch-gridcoin", "auto", "--once", "--mint", "--max-blocks", "50"]);
+  assert.ok(commands.some(([name]) => name === "process-redemptions"));
 });

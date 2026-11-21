@@ -542,7 +542,9 @@ Validation milestones and their completion status are tracked in [VALIDATION.md]
 The initial unified CLI and service runner are implemented. Build with
 `cargo build --release -p wgrc-relayer`, then run
 `bash bin/wgrc serve 3339204 --once` for one cycle, or omit `--once` for
-continuous operation. Use the reserve's existing start height. The service
+continuous operation. For subsequent starts, omit the height with
+`bash bin/wgrc serve --enable-payouts`; the saved checkpoint is used automatically.
+An explicit start height is required only when the reserve has no checkpoint. The service
 coordinates discovery, minting, payout and cancellation recovery, and periodic
 reconciliation. Gridcoin scans yield after 50 block/rewind steps per cycle
 (configurable with `WGRC_GRIDCOIN_BATCH_SIZE`) so catch-up does not occupy

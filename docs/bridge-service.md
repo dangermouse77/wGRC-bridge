@@ -14,7 +14,14 @@ bash bin/wgrc --help
 bash bin/wgrc serve 3339204 --once
 ```
 
-Use the start height already recorded for your reserve. The launcher reads
+On an existing reserve, omit the height: `bash bin/wgrc serve --enable-payouts`.
+The watcher reads its saved original start and latest checkpoint automatically
+and logs the last scanned block and next height. Supply an explicit height
+only for the first run on a reserve with no checkpoint. If you supply one
+later, it must match the original start, not the current chain tip. A missing
+checkpoint fails closed instead of silently starting at the tip.
+
+The launcher reads
 `relayer/bridge.dev.json` and the existing environment overrides. It prompts
 for the Gridcoin RPC password only in an interactive terminal; otherwise set
 `GRC_RPC_PASSWORD`. `WGRC_RELAYER_BIN` can select another prebuilt binary.

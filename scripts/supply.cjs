@@ -82,11 +82,15 @@ async function main() {
 
   let pending;
   let payouts;
+  let reserveTotal;
   if (includePending || includePayouts) {
     const { connectTestnet, deposit, InvalidDeposit, resolveGridcoinAddress } = require("./gridcoin-deposit.cjs");
     const reserveAddress = process.env.WGRC_TESTNET_RESERVE_ADDRESS;
     if (!reserveAddress) throw new Error("Set WGRC_TESTNET_RESERVE_ADDRESS or use wgrc supply --pending-deposits.");
     const reserve = await connectTestnet(reserveAddress);
+    reserveTotal = await require("./reserve-balance.cjs").reserveBalance(
+      reserve.rpc, reserve, require("./gridcoin-deposit.cjs").baseUnits,
+    );
     if (includePending) pending = await require("./pending-deposits.cjs").pendingDeposits(
       reserve.rpc, reserve, receipts, deposit, InvalidDeposit,
     );
@@ -119,6 +123,10 @@ async function main() {
     console.log(`${label}: ${formatAmount(amount, decimals)} wGRC (${amount} base units)`);
   }
   console.log(`Finalized slots: bridge records ${snapshot.context.slot}, mint ${after.context.slot}`);
+  if (reserveTotal !== undefined) {
+    console.log(`GRC reserve balance (at least 1 confirmation): ${formatAmount(reserveTotal, 8)} GRC`);
+    console.log(`Coverage (outstanding wGRC vs reserve): ${require("./reserve-balance.cjs").coverageLabel(reserveTotal, supply, decimals)}`);
+  }
   console.log(pending
     ? `Locked in pending deposits: ${formatAmount(pending.total, 8)} GRC (${pending.total} base units; ${pending.count} unspent deposits)`
     : "Locked in pending deposits: not checked (use --pending-deposits with reserve-wallet RPC)");

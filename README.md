@@ -647,3 +647,17 @@ The project does not guarantee asset redemption, reserve solvency, smart contrac
 
 *Connecting scientific computing and decentralized finance, one blockchain at a time.*
 
+# Reconciliation acknowledgements
+
+Apply `relayer/migrations/006_reconciliation_acknowledgements.sql` before running reserve reconciliation with this revision, then rebuild the relayer.
+
+After independently reviewing a historical withdrawal, acknowledge its current issue:
+
+```bash
+bash bin/wgrc reconcile-reserve --acknowledge WITHDRAWAL_ADDRESS --reason "Reviewed historical operation; backing retained"
+```
+
+This supports missing settlement records and legacy burn-first records. It requires sufficient confirmed and spendable backing. Reviewed issues disappear from the open issues list; when all issues are acknowledged and backing is sufficient, status becomes `reconciled`. Their conservative backing allowances remain included: acknowledgement does not prove payment, cancel a withdrawal, or release reserves. Changed issue details require a new review, and shortfalls remain visible.
+
+The audit table `wgrc.reconciliation_acknowledgements` retains the original report, reason, database user and timestamp. Inspect it with `SELECT * FROM wgrc.reconciliation_acknowledgements ORDER BY acknowledged_at;`. Existing Devnet/Testnet restrictions still apply; this does not enable Mainnet operation.
+

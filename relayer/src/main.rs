@@ -126,7 +126,7 @@ enum Action<'a> {
     ProcessRedemptions,
     RecoverCancellations,
     RecoverRedemptions { once: bool },
-    ReconcileReserve,
+    ReconcileReserve { acknowledgement: Option<(String, String)> },
     PayoutRecords,
     WatchGridcoin { height: Option<i64>, once: bool, mint: bool, max_blocks: Option<u32> },
     WatchSolana { once: bool },
@@ -143,7 +143,8 @@ fn run() -> Result<()> {
         [command, address] if command == "cancel-redemption" => Action::CancelRedemption(address),
         [command] if command == "process-redemptions" => Action::ProcessRedemptions,
         [command] if command == "recover-cancellations" => Action::RecoverCancellations,
-        [command] if command == "reconcile-reserve" => Action::ReconcileReserve,
+        [command, flag, withdrawal, reason_flag, reason] if command == "reconcile-reserve" && flag == "--acknowledge" && reason_flag == "--reason" => Action::ReconcileReserve { acknowledgement: Some((withdrawal.clone(), reason.clone())) },
+        [command] if command == "reconcile-reserve" => Action::ReconcileReserve { acknowledgement: None },
         [command] if command == "payout-records" => Action::PayoutRecords,
         [command, flags @ ..]
             if command == "recover-redemptions"
@@ -253,10 +254,10 @@ fn run() -> Result<()> {
                 .ok_or("Missing wGRC mint address")?;
             redemption::recover(connect, &reserve, &minimum, &mint, once)
         }
-        Action::ReconcileReserve => {
+        Action::ReconcileReserve { acknowledgement } => {
             let mint = settings.wgrc_mint_address.or(defaults.wgrc_mint_address)
                 .ok_or("Missing wGRC mint address")?;
-            reconciliation::report(&mut connect()?, &reserve, &minimum, &mint)
+            reconciliation::report(&mut connect()?, &reserve, &minimum, &mint, acknowledgement)
         }
         Action::WatchSolana { .. } => unreachable!("Solana watcher handled above"),
     }

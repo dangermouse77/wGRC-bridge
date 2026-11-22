@@ -225,13 +225,68 @@ Pending deposits, escrow, and payouts all returned to zero. These observations
 support saved-payout recovery across a service restart without an observed
 duplicate payout or burn for this withdrawal.
 
+### Repeated interruptions during mixed deposits and withdrawals
+
+The subsequent live test started with 860 wGRC outstanding and 1,860.995 GRC
+in the configured reserve. The operator submitted deposits of 2 and 3 GRC:
+
+- `5bb55e23c05b13a8b14b1288f0bcefbeaa37c4b1124cf5bcdf2f1252ac66dad3`
+- `7dabf00b7eecb238b9e2dae6ddb3a32254f1ea6c5065286f541e968fc06314b8`
+
+Two 1 wGRC withdrawal requests used accounts
+`6nNxz9n2TJQ2yRn8S6ZPYzrQAZenH6YnXNKj8yQHr1DX` and
+`3ZArBmS6rwuvJrDK78cYUqcD6oH4tfiEkwkZzPPUF3ka`.
+The service began from saved Gridcoin height 3343725. The operator reported
+interrupting and restarting it several times while work remained pending.
+The precise interruption boundaries were not captured; this was not a controlled
+forced-crash test.
+
+An intermediate report showed 5 GRC in two pending deposits, 2 wGRC in escrow,
+and one payout awaiting confirmation. Repeated recovery/processing logs checked
+the same payout `d4b2f8fdb387f72e36048a482554cb1dfdb44411cee731826d7bf6958b48a4eb`
+for withdrawal `6nNxz9n2TJQ2yRn8S6ZPYzrQAZenH6YnXNKj8yQHr1DX`.
+Later, both deposits had minted and one withdrawal had settled: supply was
+864 wGRC, escrow was 1 wGRC, and one payout still awaited confirmation.
+The pending-payout line counts only outstanding confirmations, not lifetime payments.
+
+The final report at Solana slots 525124717–525124718 showed:
+
+| Metric | Final result |
+| --- | ---: |
+| Total minted | 873.00000004 wGRC |
+| Total burned | 10.00000004 wGRC |
+| Outstanding supply | 863 wGRC |
+| Pending deposits, withdrawal escrow, and payouts | All zero |
+| Reserve balance | 1,863.993 GRC |
+
+The operator confirmed that destination `mjdQ1AZnsTyc4HXu99doHzNEHnJJ4PC3gh`
+received two separate 1 GRC payments. Supply matched `860 + 5 - 2 = 863`;
+reserve matched `1860.995 + 5 - 2 - 0.002 fees = 1863.993`.
+There was no observed excess mint, burn, or payout in this scenario.
+
+Detailed reconciliation at finalized slot 525125328 returned `reconciled`,
+no open issues, no backing or spendable shortfall, and no pending escrow or
+confirmed payouts awaiting burn. Confirmed and spendable reserve were both
+1,863.993 GRC; required backing was 863.00000004 GRC, leaving
+1,000.99299996 GRC surplus. Four acknowledged historical issues remained included
+as 0.00000004 GRC of conservative backing allowances while absent from open issues.
+This also live-verified acknowledgement reporting and the simple supply coverage line.
+
+Reports earlier rejected reads when the Gridcoin tip changed mid-inspection;
+subsequent successful reports were obtained. These failures demonstrate the
+consistency guard, not automatic retry (which was not tested here).
+
+This test completed with the original 10-confirmation threshold. The development
+default was subsequently reduced to 6 for future tests; historical results above
+remain 10-confirmation results. Live verification at the new threshold is pending.
+
 ### Scope still outstanding
 
 - Multiple daemon instances competing for the same database and reserve.
 - Cancellation racing with payout preparation or settlement.
 - Forced worker timeouts and crashes at signing, broadcast, and database commit boundaries.
 - Reorganizations and ambiguous RPC responses during overlapping operations.
-- Sustained load and a restart during the mixed deposit/withdrawal workload itself.
+- Sustained load and controlled crash injection during mixed workloads.
 
 ## Validation milestones
 
@@ -287,7 +342,9 @@ Completion states below incorporate the recorded live results above.
 - [ ] Verify cancellation/payout races and timeout recovery against PostgreSQL and Devnet.
 - [x] Verify overlapping deposits and withdrawals live through one service (2 + 3 GRC deposits; 1 + 2 wGRC withdrawals).
 - [x] Verify service restart recovery of an awaiting-confirmation payout with the same transaction ID and expected final supply.
-- [ ] Verify restart during a mixed-flow workload and fault-injected duplicate prevention.
+- [x] Verify repeated service interruptions/restarts during a mixed-flow workload, with expected totals and two separately received payouts.
+- [ ] Verify fault-injected duplicate prevention at controlled failure boundaries.
+- [ ] Verify development processing and reporting with the new 6-confirmation default.
 - [x] Test complete Gridcoin-to-Solana CLI flow with sequential manual processing.
 - [x] Test complete Solana-to-Gridcoin CLI flow with sequential manual processing.
 - [ ] Test failures, restarts, and duplicate prevention.

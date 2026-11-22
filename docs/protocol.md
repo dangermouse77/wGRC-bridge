@@ -83,7 +83,9 @@ original ID before attempting another deposit. The `send` command builds a
 new transaction and is intended for a new deposit.
 
 After the transaction reaches the desired depth, inspect it using the
-validator. The Testnet wrappers and relayer default to 10 confirmations.
+validator. The Testnet wrappers and development relayer default to 6 Gridcoin
+confirmations. This threshold does not change Solana's finalized commitment or
+establish a production confirmation policy.
 
 ```bash
 node scripts/gridcoin-deposit.cjs check "$reserve" '<txid>' 10

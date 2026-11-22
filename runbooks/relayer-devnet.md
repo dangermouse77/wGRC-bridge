@@ -67,7 +67,10 @@ cargo run -p wgrc-relayer -- process-deposit \
   448bd13d7db71908372e30bb40f98134506810637339161bbbf34415499bf76e
 ```
 
-The deposit check, watcher and mint all default to 10 confirmations. Set
+The development deposit check, watcher, mint, redemption settlement and reconciliation
+all default to 6 Gridcoin Testnet confirmations. Rebuild the Rust relayer and
+restart the service after changing `relayer/gridcoin-min-confirmations.txt`;
+the binary embeds this default at compile time. This is not a Mainnet policy. Set
 `WGRC_MIN_CONFIRMATIONS` in the shell running them to override that default.
 
 The command records the validated amount in base units, reserve output,

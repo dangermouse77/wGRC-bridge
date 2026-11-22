@@ -341,9 +341,55 @@ commands. They do not prove every internal timing interleaving: a concurrent
 payout-winning run, cancellation during settlement, and controlled timeouts/crashes
 remain untested. The sequential payout-first case above is distinct from those races.
 
+### Two service instances processing the same requests
+
+The operator ran two bridge services concurrently against the same development
+database and reserve, with the 6-confirmation setting active. Starting supply was
+862 wGRC and reserve balance was 1,862.992 GRC. The workload comprised:
+
+- One 2 GRC deposit, transaction
+  `71f197d1c1cc0e3aaf51ac3966aee080fe641986a420f14d665ba97e4e2f6ee6`,
+  output 1, deposit ID
+  `cbb962dac63ba753c30f4830df7c320fd6c58ff7282c6e7c423b2333e918110a`.
+- One 1 wGRC withdrawal, account
+  `Ht5akbrpRgQyspGBSwVSZMSkhy2mZuwXsbSKthNGXEFA`, to
+  `mjdQ1AZnsTyc4HXu99doHzNEHnJJ4PC3gh`.
+
+An intermediate supply report at slot 525136468 showed 2 GRC in one pending
+deposit, 1 wGRC in withdrawal escrow, and 1 GRC awaiting payout confirmations.
+The final supply report at slot 525140883 showed:
+
+| Metric | Final result |
+| --- | ---: |
+| Total minted | 875.00000004 wGRC |
+| Total burned | 12.00000004 wGRC |
+| Outstanding supply | 863 wGRC |
+| Pending deposits, withdrawal escrow, and payouts | All zero |
+| Reserve balance | 1,863.991 GRC |
+
+The operator confirmed receipt of the 1 GRC payout at the destination. Supply
+matched `862 + 2 - 1 = 863`; reserve matched
+`1862.992 + 2 - 1 - 0.001 fee = 1863.991`. The observed totals and payment
+showed no duplicate mint, burn or payout in this two-service workload.
+
+A subsequent Solana scan at slot 525141637 observed 16 withdrawals with zero
+changes. Reconciliation at finalized slot 525141655 and Gridcoin tip
+`a0665c5fb1ab22118d12095baff37b60075b12caeb6c2955b48cfb9fce4c82af`
+returned `reconciled`, no open issues, no backing or spendable shortfall, no
+pending escrow, and no confirmed payouts awaiting burn. Confirmed and spendable
+reserve were both 1,863.991 GRC; required backing was 863.00000004 GRC, leaving
+1,000.99099996 GRC surplus. Four historical acknowledgements remained counted.
+
+This validates the observed outcome with two competing services for one deposit
+and one withdrawal. Both worker logs and the payout transaction ID were not
+provided for independent comparison, so no claim is made about specific lock
+interleavings. The reports confirm the configured threshold was 6, but do not
+establish the exact confirmation count at which the deposit minted. Sustained
+load and forced failures with multiple services remain untested.
+
 ### Scope still outstanding
 
-- Multiple daemon instances competing for the same database and reserve.
+- Sustained workloads and forced failures with multiple daemon instances.
 - Concurrent payout-winning cancellation race and cancellation during settlement.
 - Forced worker timeouts and crashes at signing, broadcast, and database commit boundaries.
 - Reorganizations and ambiguous RPC responses during overlapping operations.
@@ -402,6 +448,7 @@ Completion states below incorporate the recorded live results above.
 - [x] Verify pending-deposit and pending-payout supply reports live.
 - [x] Verify cancellation-first and payout-first protection against PostgreSQL and Devnet.
 - [x] Verify concurrent cancellation-winning processing (two live runs).
+- [x] Verify two service instances sharing the database and reserve for one 2 GRC deposit and one 1 wGRC withdrawal, with expected totals, received payout and clean reconciliation.
 - [ ] Verify concurrent payout-winning races, settlement races and timeout recovery.
 - [x] Verify overlapping deposits and withdrawals live through one service (2 + 3 GRC deposits; 1 + 2 wGRC withdrawals).
 - [x] Verify service restart recovery of an awaiting-confirmation payout with the same transaction ID and expected final supply.

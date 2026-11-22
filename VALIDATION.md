@@ -152,8 +152,9 @@ figures as the detailed report.
 ## Payout input protection tests
 
 Mocked redemption tests cover protected deposits, finalized input release,
-overlapping mint completion, and failed source lookups. Live mixed-flow
-verification remains outstanding.
+overlapping mint completion, and failed source lookups. The live mixed-flow
+result below verifies aggregate outcomes; it does not independently trace every
+payout input to prove protection under all possible interleavings.
 
 ## Phase 4 sequential CLI results
 
@@ -173,8 +174,64 @@ on 2026-11-18 with the daemon stopped and processing invoked manually:
   without changing the 6 wGRC supply at that time.
 
 These results verify both sequential CLI flows and the live pending reports.
-They do not yet verify unattended service operation, concurrent requests,
+Taken alone, they do not verify unattended service operation, concurrent requests,
 cancellation/payout races, or the new worker timeout behavior under live faults.
+
+## Phase 4 live overlapping flows and service recovery
+
+The operator supplied the following live results from `solchain`, using Gridcoin
+Testnet, Solana Devnet, and the development PostgreSQL database. These are observed
+pilot outcomes, not a load test or a guarantee for arbitrary concurrent workers.
+
+### Two deposits and two withdrawals outstanding together
+
+Two deposits of 2 and 3 GRC overlapped with withdrawals of 1 and 2 wGRC.
+While processing was still underway, the supply report showed 82 wGRC outstanding,
+3 wGRC in withdrawal escrow, 5 GRC in two pending deposits, and no payouts yet
+awaiting confirmation. Historical Gridcoin scanning delayed processing.
+
+After completion, the operator reported:
+
+| Metric | Before completion | After completion |
+| --- | ---: | ---: |
+| Total minted | 86.00000004 wGRC | 91.00000004 wGRC |
+| Total burned | 4.00000004 wGRC | 7.00000004 wGRC |
+| Outstanding supply | 82 wGRC | 84 wGRC |
+| Pending withdrawal escrow | 3 wGRC | 0 wGRC |
+| Pending deposits | 5 GRC (2 deposits) | 0 GRC |
+| Payouts awaiting confirmation | 0 GRC | 0 GRC |
+
+The final supply matches `82 + 5 - 3 = 84`. The final report used finalized
+Solana slot 524825335 and Gridcoin tip
+`87e6947a79c02e673b1450a3b80057289b4890cf5c773c907e906f7fad1ce357`.
+No excess mint or burn appeared in these totals. This exercised overlapping
+requests handled by one service, not multiple independent daemon instances.
+
+### Service restart with a payout awaiting confirmations
+
+A subsequent 1 wGRC withdrawal used account
+`81ryB76eg8bYmGG4aPBKyBgtgZuJNt9yEPRvJjau2nwN` and Gridcoin payout
+`89b28d54dd7e5bc15f5093c81ebe6ce27a66f9209684acace8f696bb216448fe`.
+The payout initially stayed at zero confirmations while Gridcoin Testnet stopped
+advancing at height 3343641. When two blocks arrived, the relayer reported two
+confirmations. After installing automatic checkpoint resume and restarting the
+service, the operator reported three confirmations for the continuing payout.
+
+Recovery settled the same payout at 10 confirmations, with Solana signature
+`3tDUeZQpDA9GgQSTxxT9bjxtgkCYVTJ4Zu4mfCYVaa7h25K5kukAdywDEqdNW1PFqUVQ9PT5bxedPaP9M5xE9iHt`.
+Outstanding supply decreased from 84 to 83 wGRC; total burned increased to
+8.00000004 wGRC, with total minted unchanged at 91.00000004 wGRC.
+Pending deposits, escrow, and payouts all returned to zero. These observations
+support saved-payout recovery across a service restart without an observed
+duplicate payout or burn for this withdrawal.
+
+### Scope still outstanding
+
+- Multiple daemon instances competing for the same database and reserve.
+- Cancellation racing with payout preparation or settlement.
+- Forced worker timeouts and crashes at signing, broadcast, and database commit boundaries.
+- Reorganizations and ambiguous RPC responses during overlapping operations.
+- Sustained load and a restart during the mixed deposit/withdrawal workload itself.
 
 ## Validation milestones
 
@@ -182,7 +239,12 @@ cancellation/payout races, or the new worker timeout behavior under live faults.
 
 Automatic resume is covered by a mocked service test for omitted height and a
 Rust unit test for saved origins, explicit first starts, and mismatched heights.
-Live confirmation of the new no-height startup remains pending.
+Live no-height startup was observed with `wgrc serve --enable-payouts`: the
+watcher selected `auto` and reported last scanned height 3343643, next height
+3343644, and original start 3339204. That invocation initially encountered
+Gridcoin RPC `ECONNREFUSED`; after connectivity was restored, the operator
+confirmed receipt of a separate 777 wGRC deposit in Phantom. This is an additional
+service/resume observation, not another mixed-flow concurrency test.
 
 The service defaults to 50 scan steps per cycle and then runs the withdrawal
 steps. Mocked service tests cover custom batch sizes, interleaving, unchanged
@@ -191,9 +253,13 @@ resuming without skipping, catch-up completion, and error propagation.
 Run `node --test tests/service.cjs` and
 `cargo test -p wgrc-relayer batch_tests` before deployment. Live verification
 should confirm `watch-solana` and payout recovery run between historical scan
-batches while checkpoint heights continue advancing. This live test is pending.
+batches while checkpoint heights continue advancing. Live logs showed repeated
+50-step-limited watcher invocations interleaved with Solana scanning, payout
+recovery, cancellation recovery, and payout processing, including a newly scanned
+Gridcoin block at height 3343619. A prolonged historical backlog with a pending
+payout has not yet been independently demonstrated after this batching change.
 
-Completion states below were moved from the README without changing their status.
+Completion states below incorporate the recorded live results above.
 
 ### Phase 1 — Solana Smart Contract
 
@@ -219,7 +285,9 @@ Completion states below were moved from the README without changing their status
 
 - [x] Verify pending-deposit and pending-payout supply reports live.
 - [ ] Verify cancellation/payout races and timeout recovery against PostgreSQL and Devnet.
-- [ ] Verify overlapping deposits and withdrawals live, including worker restarts and duplicate prevention, before enabling automatic payout initiation.
+- [x] Verify overlapping deposits and withdrawals live through one service (2 + 3 GRC deposits; 1 + 2 wGRC withdrawals).
+- [x] Verify service restart recovery of an awaiting-confirmation payout with the same transaction ID and expected final supply.
+- [ ] Verify restart during a mixed-flow workload and fault-injected duplicate prevention.
 - [x] Test complete Gridcoin-to-Solana CLI flow with sequential manual processing.
 - [x] Test complete Solana-to-Gridcoin CLI flow with sequential manual processing.
 - [ ] Test failures, restarts, and duplicate prevention.
@@ -230,6 +298,7 @@ Completion states below were moved from the README without changing their status
 - [ ] Verify reserve transparency.
 
 The supervised service deployment milestone remains in the README. Live service
-operation, cancellation/payout races, worker timeouts, and mixed concurrent flows
-still require verification as described above. Additional service test steps are
+operation and overlapping flows have the pilot coverage recorded above;
+cancellation/payout races, worker timeouts, and broader fault recovery remain open.
+Additional service test steps are
 in [the operating guide](docs/bridge-service.md#validation-before-unattended-payouts).

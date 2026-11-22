@@ -278,12 +278,73 @@ consistency guard, not automatic retry (which was not tested here).
 
 This test completed with the original 10-confirmation threshold. The development
 default was subsequently reduced to 6 for future tests; historical results above
-remain 10-confirmation results. Live verification at the new threshold is pending.
+remain 10-confirmation results. Subsequent redemption and reporting verification
+at 6 confirmations is recorded below; deposit minting at the new boundary remains pending.
+
+### Cancellation coordination and six-confirmation redemption
+
+The following operator-run tests used Gridcoin Testnet, Solana Devnet and the
+development database, with the bridge service stopped and commands invoked
+explicitly. They exercise the real database and chains, rather than mocked RPCs.
+
+**Cancellation before payout preparation.** Withdrawal
+`EEsegJbd8L79Bexs5eUokkdXADFf6Aqp6AEk81yjE3Fp` requested 1 wGRC and
+was discovered at finalized slot 525127945. Cancellation finalized with signature
+`2RMzJorEAGWycgArVF6kpLHKpLsK9h3puaorb3j8DhxRzN8vRe2iiPPMLXrqATTxMQje6LGuNC17AobSCHpvbqHa`.
+An explicit payout attempt was refused with
+`Cancellation requested. Resume cancel-redemption; payout is blocked.`
+Supply remained 863 wGRC, total burned remained 10.00000004 wGRC, and reserve
+remained 1,863.993 GRC. All pending balances returned to zero. Reconciliation
+at slot 525128317 returned `reconciled`, no open issues or shortfalls, and
+`minimumGridcoinConfirmations: 6`.
+
+**Payout preparation before cancellation.** Withdrawal
+`73gHL8JZ5irgxEvYH5DUGuACe7FFC8fggK1vZcwK4Dcp` requested 1 wGRC.
+Processing saved and broadcast payout
+`8926186296056f6d8cf99a88c460c3afc9caff19c22904cb22f5bd75b9bddcdc`.
+Cancellation was refused because a saved payout existed. Repeated processing
+retained that transaction ID at 0, 1, 2 and 4 confirmations, then settled at
+6 confirmations with signature
+`BZuGqTKLRmTWpMSMiLQoYtjxA9Y6eRqkBg1aPGdKQhgwqLUQFrVs2d9pow4xjysPv5pmXuMgT6GXbVBCvdGJg49`.
+Supply decreased to 862 wGRC and total burned increased to 11.00000004 wGRC;
+total minted remained 873.00000004 wGRC. Reserve decreased by the 1 GRC payout
+plus 0.001 GRC fee to 1,862.992 GRC. All pending balances were zero.
+Reconciliation at slot 525131573 returned `reconciled` with no open issues or
+shortfalls. This verifies live redemption settlement at the new threshold,
+but does not exercise deposit minting at six confirmations.
+
+**Two concurrent cancellation/payout attempts.** For each new 1 wGRC withdrawal,
+the operator discovered the request, then launched `process-redemption` and
+`cancel-redemption` as background processes in the same shell, retaining separate
+logs and exit codes. Both runs had the following outcome:
+
+- Cancellation exited 0 and finalized as `cancelled`.
+- Payout exited 1 with the expected cancellation-intent refusal above.
+- Supply stayed 862 wGRC and reserve stayed 1,862.992 GRC, with no additional burn.
+- Pending deposits, escrow and payouts were zero; reconciliation had no open
+  issues, backing shortfall or spendable shortfall.
+
+| Run | Withdrawal account | Final reconciliation slot |
+| --- | --- | ---: |
+| First | `DM1Nm5UaAxTY6U1gwaG4BQBpeszJYnCguaWVf3STZCvN` | 525133188 |
+| Second | `41jQeogDw3aMt1MHR6XNg8tU6xttGTb7ygbPGZpPmErZ` | 525133785 |
+
+Cancellation signatures were
+`G4N6VmL8Pyo3G8TjtZ6y1mdihF9JfRCg3htMrE87CfFEG9niu42p6M2Q5YwxjRWtPtgGFgQrGVtXVfaeDux4zK2`
+and `4nxi3preFM5DB4ro737N36Srt6rvFHXxwAUBTmUwHt6MkWf41kBULpuGq6jYLAHhfCAy7or6idVKtKsDwpf38NBQ`,
+respectively. Both reconciliation reports retained four acknowledged historical
+issues in required backing of 862.00000004 GRC, giving surplus of
+1,000.99199996 GRC.
+
+These runs verify safe cancellation-winning outcomes with concurrently launched
+commands. They do not prove every internal timing interleaving: a concurrent
+payout-winning run, cancellation during settlement, and controlled timeouts/crashes
+remain untested. The sequential payout-first case above is distinct from those races.
 
 ### Scope still outstanding
 
 - Multiple daemon instances competing for the same database and reserve.
-- Cancellation racing with payout preparation or settlement.
+- Concurrent payout-winning cancellation race and cancellation during settlement.
 - Forced worker timeouts and crashes at signing, broadcast, and database commit boundaries.
 - Reorganizations and ambiguous RPC responses during overlapping operations.
 - Sustained load and controlled crash injection during mixed workloads.
@@ -339,12 +400,15 @@ Completion states below incorporate the recorded live results above.
 ### Phase 4 — CLI and Integration Testing
 
 - [x] Verify pending-deposit and pending-payout supply reports live.
-- [ ] Verify cancellation/payout races and timeout recovery against PostgreSQL and Devnet.
+- [x] Verify cancellation-first and payout-first protection against PostgreSQL and Devnet.
+- [x] Verify concurrent cancellation-winning processing (two live runs).
+- [ ] Verify concurrent payout-winning races, settlement races and timeout recovery.
 - [x] Verify overlapping deposits and withdrawals live through one service (2 + 3 GRC deposits; 1 + 2 wGRC withdrawals).
 - [x] Verify service restart recovery of an awaiting-confirmation payout with the same transaction ID and expected final supply.
 - [x] Verify repeated service interruptions/restarts during a mixed-flow workload, with expected totals and two separately received payouts.
 - [ ] Verify fault-injected duplicate prevention at controlled failure boundaries.
-- [ ] Verify development processing and reporting with the new 6-confirmation default.
+- [x] Verify development redemption settlement and reporting with the new 6-confirmation default.
+- [ ] Verify deposit minting at the new 6-confirmation boundary.
 - [x] Test complete Gridcoin-to-Solana CLI flow with sequential manual processing.
 - [x] Test complete Solana-to-Gridcoin CLI flow with sequential manual processing.
 - [ ] Test failures, restarts, and duplicate prevention.
@@ -356,6 +420,7 @@ Completion states below incorporate the recorded live results above.
 
 The supervised service deployment milestone remains in the README. Live service
 operation and overlapping flows have the pilot coverage recorded above;
-cancellation/payout races, worker timeouts, and broader fault recovery remain open.
+the remaining cancellation/payout interleavings, worker timeouts, and broader
+fault recovery remain open.
 Additional service test steps are
 in [the operating guide](docs/bridge-service.md#validation-before-unattended-payouts).

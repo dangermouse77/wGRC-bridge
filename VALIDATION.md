@@ -387,6 +387,58 @@ interleavings. The reports confirm the configured threshold was 6, but do not
 establish the exact confirmation count at which the deposit minted. Sustained
 load and forced failures with multiple services remain untested.
 
+### Reserve-host migration and timeout attempt (2026-11-23)
+
+The reserve RPC moved to `gridtestbridge:25715`, while funding remained on
+`gridtestnet`. Withdrawal `5v91VtU5mRUqMvDinoE98RCdGUmpT3DwGVSfMypNA14K`
+paid through transaction
+`ad3ad04da4b5c9369f85ee6bdf4607760d6e8dba1d3df2562e4a9a295f91cc9d`.
+A one-second worker limit completed normally; zero was rejected as invalid.
+**No live timeout occurred**, so this attempt does not validate timeout recovery.
+Normal retries kept the same transaction ID through five confirmations and
+settled at six, with signature
+`2A2C81Sj8KfFiehFQKv7BAhMztwcpXXZWMCg49vtQjKck1TLnvDiMBYyvuRguZFwVivNJhPbiVyGFeHprubdgvse`.
+
+Final supply was 862 wGRC (875.00000004 minted, 13.00000004 burned), reserve
+was 1,862.990 GRC, and all pending amounts were zero. Reconciliation at slot
+525489020 returned `reconciled`, no open issues or shortfalls, required backing
+862.00000004 GRC and surplus 1,000.98999996 GRC. This verifies normal redemption
+and reporting using the new reserve host, not forced termination recovery.
+
+### Controlled development worker-timeout procedure
+
+With services stopped, create and discover a new test withdrawal, then process
+it normally once to save a payout. Keep its withdrawal address and payout txid.
+Against the reserve RPC, run:
+
+```bash
+WGRC_ENABLE_TEST_FAULTS=devnet \
+WGRC_TEST_REDEMPTION_DELAY_SECONDS=10 \
+WGRC_WORKER_TIMEOUT_SECONDS=1 \
+  bash bin/wgrc process-redemption "$withdrawal"
+```
+
+Expect a `Devnet test delay` diagnostic followed by a worker timeout. The hook
+only accepts public Solana Devnet, explicit fault opt-in, and advancement of an
+already saved payout. It pauses before RPC or signing; it does not simulate a
+lost broadcast response or a crash after settlement submission. Do not persist
+these test variables in the service environment.
+
+Retry without the three temporary variables and continue until settlement:
+
+```bash
+bash bin/wgrc process-redemption "$withdrawal"
+```
+
+Verify the original payout txid is reused, exactly one payout and burn occur,
+pending balances return to zero, and reconciliation has no shortfall.
+Live execution of this controlled procedure remains pending.
+
+Local `node --test tests/worker.cjs` passed six tests, including actual supervisor
+termination of the delayed child with exit 124, completion without the delay on
+retry, and rejection of missing opt-in, non-Devnet, invalid delay and unsaved
+payout configurations. These tests do not access PostgreSQL or either blockchain.
+
 ### Scope still outstanding
 
 - Sustained workloads and forced failures with multiple daemon instances.

@@ -45,3 +45,30 @@ test("invalid timeout fails before starting worker", () => {
   assert.equal(result.status, 1);
   assert.equal(result.stdout, "");
 });
+
+test("guarded redemption delay times out and normal retry completes", () => {
+  const modulePath = require.resolve("../relayer/test-delay.cjs");
+  const source = `require(${JSON.stringify(modulePath)}).testDelay("advance", { payout: {} }).then(() => console.log("completed"));`;
+  const env = { ...process.env, WGRC_WORKER_TIMEOUT_SECONDS: "1",
+    WGRC_ENABLE_TEST_FAULTS: "devnet", ANCHOR_PROVIDER_URL: "https://api.devnet.solana.com",
+    WGRC_TEST_REDEMPTION_DELAY_SECONDS: "5" };
+  const result = run(source, { env });
+  assert.equal(result.status, 124, result.stderr);
+  assert.match(result.stderr, /Devnet test delay/);
+  assert.equal(result.stdout, "");
+  delete env.WGRC_TEST_REDEMPTION_DELAY_SECONDS;
+  const retry = run(source, { env });
+  assert.equal(retry.status, 0, retry.stderr);
+  assert.match(retry.stdout, /completed/);
+});
+
+test("redemption test delay rejects unsafe configuration", async () => {
+  const { testDelay } = require("../relayer/test-delay.cjs");
+  const env = { WGRC_ENABLE_TEST_FAULTS: "devnet", ANCHOR_PROVIDER_URL: "https://api.devnet.solana.com",
+    WGRC_TEST_REDEMPTION_DELAY_SECONDS: "5" };
+  await assert.rejects(testDelay("advance", { payout: {} }, { ...env, WGRC_ENABLE_TEST_FAULTS: "" }));
+  await assert.rejects(testDelay("advance", { payout: {} }, { ...env, ANCHOR_PROVIDER_URL: "https://api.mainnet.solana.com" }));
+  await assert.rejects(testDelay("prepare", {}, env));
+  await assert.rejects(testDelay("advance", {}, env));
+  await assert.rejects(testDelay("advance", { payout: {} }, { ...env, WGRC_TEST_REDEMPTION_DELAY_SECONDS: "0" }));
+});

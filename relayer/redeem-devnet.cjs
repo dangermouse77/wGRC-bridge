@@ -129,6 +129,7 @@ async function main() {
   const minimum = Number(minimumArg);
   assert.ok(/^\d+$/.test(minimumArg) && Number.isSafeInteger(minimum) && minimum > 0);
   const request = JSON.parse(input);
+  await require("./test-delay.cjs").testDelay(mode, request);
   const amount = BigInt(request.amountBaseUnits);
   const { AnchorProvider, Program } = require("@anchor-lang/core");
   const { Connection, PublicKey } = require("@solana/web3.js");

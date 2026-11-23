@@ -338,8 +338,9 @@ issues in required backing of 862.00000004 GRC, giving surplus of
 
 These runs verify safe cancellation-winning outcomes with concurrently launched
 commands. They do not prove every internal timing interleaving: a concurrent
-payout-winning run, cancellation during settlement, and controlled timeouts/crashes
-remain untested. The sequential payout-first case above is distinct from those races.
+payout-winning run and cancellation during settlement remain untested. The
+sequential payout-first case above is distinct from those races. Subsequent
+timeout coverage is recorded below.
 
 ### Two service instances processing the same requests
 
@@ -432,12 +433,51 @@ bash bin/wgrc process-redemption "$withdrawal"
 
 Verify the original payout txid is reused, exactly one payout and burn occur,
 pending balances return to zero, and reconciliation has no shortfall.
-Live execution of this controlled procedure remains pending.
+Live execution of this controlled procedure passed in the scenario below.
 
 Local `node --test tests/worker.cjs` passed six tests, including actual supervisor
 termination of the delayed child with exit 124, completion without the delay on
 retry, and rejection of missing opt-in, non-Devnet, invalid delay and unsaved
 payout configurations. These tests do not access PostgreSQL or either blockchain.
+
+### Live controlled timeout recovery result (2026-11-23)
+
+An initial invocation of the delay on already settled withdrawal
+`5v91VtU5mRUqMvDinoE98RCdGUmpT3DwGVSfMypNA14K` timed out; normal retry
+returned its original payout and settlement signature. This exercised termination
+and settled replay, not unfinished payout recovery.
+
+For the unfinished-payout test, the operator created a new 1 wGRC withdrawal:
+`3Zs23PA1oBhf2rnnwdEQFfE4rb4pP3QPSjo8M7ovbZQE`.
+The delay initially refused to run before a payout had been saved, as intended.
+Normal processing then saved and broadcast transaction
+`4f9226ab5fb313f8f4bf7f9f8ac08f3b8e607073586b929b2459e82df1c7eae5`
+at zero confirmations. A 10-second test delay with a one-second worker limit
+produced the expected delay diagnostic and `Worker timed out after 1s`.
+
+Retrying without the fault variables resumed that same transaction at zero
+confirmations. Subsequent calls reported 2, 4 and 5 confirmations, then settled
+at 7 (configured minimum 6), with signature
+`55ZcSoNM6rHamkoRo8arCvwwxRkTHcx3H2K6c3T78udLZwd3qGFGijrsqm1NTAe6cA347ky1Nzva7RuFHFQkyG3a`.
+The Solana watcher observed the settlement at finalized slot 525493664.
+
+Final supply at slot 525493680 was 861 wGRC: total minted remained
+875.00000004 wGRC and total burned increased by one to 14.00000004 wGRC.
+Reserve decreased from 1,862.990 to 1,861.989 GRC, matching a 1 GRC payout
+plus 0.001 GRC fee. All pending balances were zero.
+
+Reconciliation at slot 525493697 and Gridcoin tip
+`fd52755509d198a4c77b470f1c069dedf0a81859ae9e35866140b5a5dd301502`
+returned `reconciled`, no open issues or shortfalls, and confirmed/spendable
+reserve of 1,861.989 GRC. Required backing was 861.00000004 GRC, including
+four acknowledged historical base units, leaving 1,000.98899996 GRC surplus.
+
+This passes live timeout recovery before advancement of an already saved payout:
+the original transaction was retained and final accounting shows one payout's
+reserve reduction and one burn. The supplied evidence does not include a separate
+destination-wallet receipt check for this withdrawal. The hook runs before RPC
+and signing, so ambiguous broadcast, post-submission settlement and database
+commit failure boundaries remain untested.
 
 ### Scope still outstanding
 
@@ -501,7 +541,8 @@ Completion states below incorporate the recorded live results above.
 - [x] Verify cancellation-first and payout-first protection against PostgreSQL and Devnet.
 - [x] Verify concurrent cancellation-winning processing (two live runs).
 - [x] Verify two service instances sharing the database and reserve for one 2 GRC deposit and one 1 wGRC withdrawal, with expected totals, received payout and clean reconciliation.
-- [ ] Verify concurrent payout-winning races, settlement races and timeout recovery.
+- [ ] Verify concurrent payout-winning races and settlement races.
+- [x] Verify controlled timeout before advancement of a saved unfinished payout, followed by same-transaction recovery and reconciled settlement.
 - [x] Verify overlapping deposits and withdrawals live through one service (2 + 3 GRC deposits; 1 + 2 wGRC withdrawals).
 - [x] Verify service restart recovery of an awaiting-confirmation payout with the same transaction ID and expected final supply.
 - [x] Verify repeated service interruptions/restarts during a mixed-flow workload, with expected totals and two separately received payouts.
@@ -519,7 +560,7 @@ Completion states below incorporate the recorded live results above.
 
 The supervised service deployment milestone remains in the README. Live service
 operation and overlapping flows have the pilot coverage recorded above;
-the remaining cancellation/payout interleavings, worker timeouts, and broader
+the remaining cancellation/payout interleavings, timeouts at other failure boundaries, and broader
 fault recovery remain open.
 Additional service test steps are
 in [the operating guide](docs/bridge-service.md#validation-before-unattended-payouts).

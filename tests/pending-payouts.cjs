@@ -17,6 +17,21 @@ test("saved but unobserved payouts are reported separately, never assumed broadc
   assert.equal(result.unobserved, 3);
 });
 
+test("observed transactions with missing or null confirmations count as zero", async () => {
+  const result = await pendingPayouts(records, withdrawals,
+    async (txid) => txid === "tx0" ? { txid } : { txid, confirmations: null }, async () => {});
+  assert.equal(result.total, 300000000n);
+  assert.deepEqual(result.confirmations, [0, 0, 0]);
+  assert.equal(result.unobserved, 0);
+});
+
+test("malformed confirmation values remain errors with payout identifiers", async () => {
+  for (const confirmations of [-1, "3", 1.5]) {
+    await assert.rejects(pendingPayouts(records, withdrawals,
+      async (txid) => ({ txid, confirmations }), async () => {}), /Payout tx0 has invalid or conflicted/);
+  }
+});
+
 test("queue excludes prepared payouts, cancellation intents and resolved withdrawals", async () => {
   const snapshot = new Map([...withdrawals,
     ["queued", { status: "pending" }], ["cancelling", { status: "pending" }],

@@ -28,13 +28,16 @@ async function pendingPayouts(records, withdrawals, lookup, validate) {
     const tx = await lookup(payout.txid);
     if (!tx) { unobserved++; continue; }
     assert.equal(tx.txid, payout.txid);
-    assert.ok(Number.isSafeInteger(tx.confirmations) && tx.confirmations >= 0,
-      "Payout has invalid or conflicted confirmations. Reconcile.");
+    // Match redemption processing: an observed unconfirmed transaction may
+    // omit confirmations or return null. Negative values remain conflicts.
+    const confirmed = tx.confirmations ?? 0;
+    assert.ok(Number.isSafeInteger(confirmed) && confirmed >= 0,
+      `Payout ${payout.txid} has invalid or conflicted confirmations (${JSON.stringify(tx.confirmations)}). Reconcile.`);
     await validate(tx, payout);
-    if (tx.confirmations < minimum) {
+    if (confirmed < minimum) {
       total += BigInt(payout.amountBaseUnits);
       count++;
-      confirmations.push(tx.confirmations);
+      confirmations.push(confirmed);
     }
   }
   return { total, count, unobserved, minimum, confirmations, queued };

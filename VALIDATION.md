@@ -564,6 +564,54 @@ settlement, with no observed duplicate payment or burn. It does not exercise
 an actual network outage, a pre-finalization interruption, or every database
 commit/crash boundary.
 
+### Five-deposit/five-withdrawal batch with two workers (2026-11-24)
+
+The operator ran two bridge services against the same development database and
+reserve to process five 1 GRC deposits and five 1 wGRC withdrawals. Funding used
+`gridtestnet`; reserve processing used `gridtestbridge`, with a six-confirmation
+threshold. The baseline was 858 wGRC outstanding and 1,858.986 GRC reserve.
+
+Intermediate reports showed all five deposits awaiting minting and five
+withdrawals in escrow, with only one payout awaiting confirmation at a time.
+After deposits minted, escrow decreased as each payout settled. The updated
+report showed one active payout at 2 of 6 confirmations with two withdrawals
+queued, then one at 5 of 6 with one queued. This exercised competing workers
+and queue draining while payouts remained serialized per reserve.
+
+During the run, a reporting error rejected missing/null payout confirmations.
+The report was corrected to treat these as zero, matching redemption processing,
+while retaining errors for negative or malformed values. Seven local reporting
+tests passed. Subsequent live reports displayed confirmation progress and queue
+counts successfully. The original RPC response was not captured, so missing/null
+confirmations remain the likely explanation, not a directly verified cause.
+
+Final supply at slot 525855441 showed:
+
+| Metric | Baseline | Final result |
+| --- | ---: | ---: |
+| Total minted | 875.00000004 wGRC | 880.00000004 wGRC |
+| Total burned | 17.00000004 wGRC | 22.00000004 wGRC |
+| Outstanding supply | 858 wGRC | 858 wGRC |
+| Reserve | 1,858.986 GRC | 1,858.981 GRC |
+
+All pending deposits, withdrawal escrow, payouts awaiting confirmations and
+queued payouts were zero. Reserve matched `1858.986 + 5 - 5 - 0.005 fees`.
+The operator confirmed reserve changes in the explorer and receipt of five
+separate 1 GRC payments at the destination.
+
+A subsequent Solana scan at slot 525856341 observed 26 withdrawals with zero
+changes. Reconciliation at slot 525856359 and Gridcoin tip
+`3db101c0e30c686728625ada3cc411a791c7abc89145a085d7aef71d02747f30`
+returned `reconciled`, no open issues, no backing or spendable shortfall, no
+pending escrow and no confirmed payouts awaiting burn. Confirmed/spendable
+reserve was 1,858.981 GRC, required backing was 858.00000004 GRC and surplus
+was 1,000.98099996 GRC. Four historical acknowledgements remained included.
+
+This modest batch passed on observed accounting and operator-confirmed receipts,
+with no excess mint, burn or payment. Individual deposit/withdrawal identifiers
+and both full worker logs were not supplied for independent per-request review.
+It is not sustained-load, throughput, or exhaustive interleaving validation.
+
 ### Scope still outstanding
 
 - Sustained workloads and forced failures with multiple daemon instances.
@@ -626,6 +674,7 @@ Completion states below incorporate the recorded live results above.
 - [x] Verify cancellation-first and payout-first protection against PostgreSQL and Devnet.
 - [x] Verify concurrent cancellation-winning processing (two live runs).
 - [x] Verify two service instances sharing the database and reserve for one 2 GRC deposit and one 1 wGRC withdrawal, with expected totals, received payout and clean reconciliation.
+- [x] Verify a five-deposit/five-withdrawal batch with two services, drained queue, expected accounting, five operator-confirmed payments and clean reconciliation.
 - [ ] Verify concurrent payout-winning races and settlement races.
 - [x] Verify controlled timeout before advancement of a saved unfinished payout, followed by same-transaction recovery and reconciled settlement.
 - [x] Verify overlapping deposits and withdrawals live through one service (2 + 3 GRC deposits; 1 + 2 wGRC withdrawals).

@@ -479,7 +479,7 @@ destination-wallet receipt check for this withdrawal. The hook runs before RPC
 and signing, so ambiguous broadcast, post-submission settlement and database
 commit failure boundaries remain untested.
 
-### Scope still outstanding
+### Lost payout-broadcast response recovery (2026-11-24)
 
 Lost broadcast response test hook: on a new discovered withdrawal, use
 `WGRC_ENABLE_TEST_FAULTS=devnet WGRC_TEST_LOST_BROADCAST_RESPONSE=1 bash bin/wgrc process-redemption "$withdrawal"`
@@ -488,9 +488,40 @@ Devnet opt-in before processing and throws after Gridcoin acknowledges broadcast
 before returning a successful advancement result. Retry the same withdrawal
 without the variables, verify the same payout txid and exactly one payment/burn,
 then reconcile. This simulates response loss after acceptance, not a network outage.
-Live verification remains pending. Fourteen mocked redemption tests passed locally
+Fourteen mocked redemption tests passed locally
 (the unavailable web3 module was stubbed for these pure logic tests), including
 the injected failure followed by same-transaction recovery and one broadcast.
+
+The operator ran this hook on withdrawal
+`GiocURs6aX84Z24QWV1GhE7F5XsbZ8ojY9m2C3Df1VCy`, discovered at finalized
+slot 525823259. The first processing call reported that Gridcoin had accepted
+payout `5536ce1987e4b6cb1940845752a199cdfd9e743a00506d32d3ff78c251b5ad16`,
+then raised the simulated lost-response error. Normal retries recovered the same
+transaction at zero and five confirmations. At six confirmations, settlement
+completed with signature
+`4gsEW2y6vngmfb7pHgRyCoiNyvsw1KSyyNZFqenCZxJdQT9HgtK5dwMwUMfHW53fuF9Wtt8hsnqphWuLmcd7Hk4i`.
+
+The Solana watcher observed settlement at slot 525826544. The final supply report
+at slot 525826564 showed total minted unchanged at 875.00000004 wGRC, total
+burned increased to 15.00000004 wGRC, and outstanding supply of 860 wGRC.
+All pending deposits, escrow and payouts were zero. Reserve decreased from
+1,861.989 to 1,860.988 GRC, matching one 1 GRC payout plus a 0.001 GRC fee.
+
+Reconciliation at slot 525826583 and Gridcoin tip
+`cd5e317f3737833970eed13a3acfb71f4f834e53bbb73fea8ae5aba9260792ba`
+returned `reconciled`, no open issues or shortfalls, and confirmed/spendable
+reserve of 1,860.988 GRC. Required backing was 860.00000004 GRC and surplus
+was 1,000.98799996 GRC; four historical acknowledgements remained included.
+
+The live hook, retries and final accounting verify recovery after simulated
+response loss following an accepted Gridcoin broadcast, with no observed extra
+payout or burn. The operator also confirmed receipt of 1 GRC at destination
+`mjdQ1AZnsTyc4HXu99doHzNEHnJJ4PC3gh`, completing the destination receipt check
+for this test. This does not establish
+recovery from a lost Solana settlement response, a real network outage, or a
+chain reorganization.
+
+### Scope still outstanding
 
 - Sustained workloads and forced failures with multiple daemon instances.
 - Concurrent payout-winning cancellation race and cancellation during settlement.
@@ -558,6 +589,8 @@ Completion states below incorporate the recorded live results above.
 - [x] Verify service restart recovery of an awaiting-confirmation payout with the same transaction ID and expected final supply.
 - [x] Verify repeated service interruptions/restarts during a mixed-flow workload, with expected totals and two separately received payouts.
 - [ ] Verify fault-injected duplicate prevention at controlled failure boundaries.
+- [x] Verify same-payout recovery and reconciled settlement after simulated loss of an accepted Gridcoin broadcast response.
+- [x] Obtain operator confirmation of the destination-wallet receipt for the lost-broadcast-response test (1 GRC received).
 - [x] Verify development redemption settlement and reporting with the new 6-confirmation default.
 - [ ] Verify deposit minting at the new 6-confirmation boundary.
 - [x] Test complete Gridcoin-to-Solana CLI flow with sequential manual processing.

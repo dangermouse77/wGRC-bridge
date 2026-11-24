@@ -495,10 +495,12 @@ One of the project's primary goals is to make Gridcoin accessible to Solana DeFi
 
 Potential applications include:
 
-- wGRC transfers between Solana wallets.
+- wGRC transfers between Solana wallets at lightning speed.
 - wGRC/USDT liquidity pools on Raydium.
+- wGRC Faucet as Smart Contract
 - Decentralized token swaps.
 - Integration with compatible Solana wallets.
+- Write any smart contract backed by wGRC
 - Additional DeFi integrations as the ecosystem develops.
 
 Liquidity pools are independent of the bridge's reserve mechanism.

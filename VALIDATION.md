@@ -521,6 +521,49 @@ for this test. This does not establish
 recovery from a lost Solana settlement response, a real network outage, or a
 chain reorganization.
 
+### Lost Solana settlement-response recovery (2026-11-24)
+
+The first attempt used withdrawal
+`2jv3GFWjRL1YJSpgkdZ2bJj2ZFJc6oqjF8VMGD6oRbtJ` and payout
+`d15ec962c61c04e567c126694ec722d91d435db204f8ec92fb8cd9564985f172`.
+It settled normally at six confirmations because solchain had not yet received
+the new hook code. The operator confirmed the missing update. This was a normal
+redemption, not a successful fault-injection test, and reduced supply to 859 wGRC.
+
+After updating the code, the operator created withdrawal
+`136J4wifwj5JbuHBgiSqNiakbBPMed7n1R2bin8pmv9y`, discovered at finalized
+slot 525833964. Processing with `WGRC_ENABLE_TEST_FAULTS=devnet` and
+`WGRC_TEST_LOST_SETTLEMENT_RESPONSE=1` saved payout
+`a64c7fa45f799bdb1db9c60cf1adaba92b5ab50703367db6b415a6ccfba9627e`.
+Calls reported zero and three confirmations before the hook reported finalized
+settlement and deliberately failed instead of returning success to the relayer.
+The finalized settlement signature printed in the error was
+`2kqEjz6Dac5KzmFFsSPcZ8mSHxxsE7t8DSAVkasXUaMq3bKocejmXZxsr1FAegi3ZsKLpYfNgX9gNKQ6KM7Z93tr`.
+
+A normal retry returned `settled` at six confirmations with the same payout txid
+and `settlementSignature: null`. This is expected for this recovery path: the
+successful response was lost, and the relayer recovered from finalized on-chain
+state without submitting another settlement. The signature remains in the fault
+log; recovery did not reconstruct it in the database.
+
+The watcher observed settlement at slot 525835820. Final supply at slots
+525835836–525835837 was 858 wGRC, with total minted unchanged at 875.00000004
+wGRC and total burned 17.00000004 wGRC (including the earlier normal attempt).
+Reserve was 1,858.986 GRC, matching one further 1 GRC payout plus 0.001 GRC fee.
+Pending deposits, escrow and payouts were all zero. The operator separately
+confirmed receipt of 1 GRC at `mjdQ1AZnsTyc4HXu99doHzNEHnJJ4PC3gh`.
+
+Reconciliation at slot 525835851 and Gridcoin tip
+`ecac915fe45b29fca13480991e8f879c9c3ffcc0baa5a5e7602ec15d0e772667`
+returned `reconciled`, no open issues or shortfalls, and confirmed/spendable
+reserve of 1,858.986 GRC. Required backing was 858.00000004 GRC, leaving
+1,000.98599996 GRC surplus; four historical acknowledgements remained included.
+
+This passes recovery after simulated response loss following finalized Solana
+settlement, with no observed duplicate payment or burn. It does not exercise
+an actual network outage, a pre-finalization interruption, or every database
+commit/crash boundary.
+
 ### Scope still outstanding
 
 - Sustained workloads and forced failures with multiple daemon instances.
@@ -590,6 +633,7 @@ Completion states below incorporate the recorded live results above.
 - [x] Verify repeated service interruptions/restarts during a mixed-flow workload, with expected totals and two separately received payouts.
 - [ ] Verify fault-injected duplicate prevention at controlled failure boundaries.
 - [x] Verify same-payout recovery and reconciled settlement after simulated loss of an accepted Gridcoin broadcast response.
+- [x] Verify recovery after simulated loss of a finalized Solana settlement response, with unchanged payout txid, expected accounting and operator-confirmed 1 GRC receipt.
 - [x] Obtain operator confirmation of the destination-wallet receipt for the lost-broadcast-response test (1 GRC received).
 - [x] Verify development redemption settlement and reporting with the new 6-confirmation default.
 - [ ] Verify deposit minting at the new 6-confirmation boundary.

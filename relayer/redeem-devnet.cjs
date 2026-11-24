@@ -108,6 +108,7 @@ async function advancePayout(rpc, payout, minimum, verifyPending, settle, previo
     await verifyPending("pending");
     const acknowledged = await rpc("sendrawtransaction", payout.signedHex);
     assert.equal(acknowledged, payout.txid, "Gridcoin acknowledged a different payout transaction.");
+    require("./test-broadcast-fault.cjs").afterBroadcast(payout.txid);
     tx = await findPayout(rpc, payout.txid);
   }
   const confirmations = tx?.confirmations ?? 0;
@@ -124,6 +125,7 @@ async function advancePayout(rpc, payout, minimum, verifyPending, settle, previo
 }
 
 async function main() {
+  require("./test-broadcast-fault.cjs").validateBroadcastFault();
   const [mode, reserveAddress, minimumArg, input] = process.argv.slice(2);
   assert.ok(["prepare", "advance", "cancel"].includes(mode), "Expected prepare, advance or cancel mode.");
   const minimum = Number(minimumArg);

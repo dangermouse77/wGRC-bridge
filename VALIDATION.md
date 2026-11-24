@@ -481,6 +481,17 @@ commit failure boundaries remain untested.
 
 ### Scope still outstanding
 
+Lost broadcast response test hook: on a new discovered withdrawal, use
+`WGRC_ENABLE_TEST_FAULTS=devnet WGRC_TEST_LOST_BROADCAST_RESPONSE=1 bash bin/wgrc process-redemption "$withdrawal"`
+for the first processing call, with all services stopped. It validates explicit
+Devnet opt-in before processing and throws after Gridcoin acknowledges broadcast,
+before returning a successful advancement result. Retry the same withdrawal
+without the variables, verify the same payout txid and exactly one payment/burn,
+then reconcile. This simulates response loss after acceptance, not a network outage.
+Live verification remains pending. Fourteen mocked redemption tests passed locally
+(the unavailable web3 module was stubbed for these pure logic tests), including
+the injected failure followed by same-transaction recovery and one broadcast.
+
 - Sustained workloads and forced failures with multiple daemon instances.
 - Concurrent payout-winning cancellation race and cancellation during settlement.
 - Forced worker timeouts and crashes at signing, broadcast, and database commit boundaries.

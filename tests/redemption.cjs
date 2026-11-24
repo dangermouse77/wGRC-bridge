@@ -9,6 +9,41 @@ const pending = async () => "pending";
 const unexpected = async () => assert.fail("Unexpected broadcast or settlement.");
 const missing = Object.assign(new Error("Transaction not found"), { rpcCode: -5 });
 
+test("injected lost broadcast response recovers without another payment", async () => {
+  const names = ["WGRC_ENABLE_TEST_FAULTS", "WGRC_TEST_LOST_BROADCAST_RESPONSE", "ANCHOR_PROVIDER_URL"];
+  const saved = names.map((name) => process.env[name]);
+  let sent = 0;
+  let confirmations = 0;
+  const rpc = async (method) => {
+    if (method === "sendrawtransaction") { sent++; return txid; }
+    if (!sent) throw missing;
+    return { txid, confirmations, blockhash };
+  };
+  try {
+    process.env.WGRC_ENABLE_TEST_FAULTS = "devnet";
+    process.env.WGRC_TEST_LOST_BROADCAST_RESPONSE = "1";
+    process.env.ANCHOR_PROVIDER_URL = "https://api.devnet.solana.com";
+    await assert.rejects(advancePayout(rpc, payout, 6, pending, unexpected), /simulating lost broadcast response/);
+    delete process.env.WGRC_TEST_LOST_BROADCAST_RESPONSE;
+    const retry = await advancePayout(rpc, payout, 6, pending, unexpected);
+    assert.equal(retry.txid, txid);
+    confirmations = 6;
+    const settled = await advancePayout(rpc, payout, 6, pending, async () => "settlement");
+    assert.equal(settled.signature, "settlement");
+    assert.equal(sent, 1);
+  } finally {
+    names.forEach((name, index) => { if (saved[index] === undefined) delete process.env[name]; else process.env[name] = saved[index]; });
+  }
+});
+
+test("broadcast fault rejects missing opt-in and non-Devnet endpoints", () => {
+  const { validateBroadcastFault } = require("../relayer/test-broadcast-fault.cjs");
+  assert.equal(validateBroadcastFault({}), false);
+  assert.throws(() => validateBroadcastFault({ WGRC_TEST_LOST_BROADCAST_RESPONSE: "1" }));
+  assert.throws(() => validateBroadcastFault({ WGRC_TEST_LOST_BROADCAST_RESPONSE: "1",
+    WGRC_ENABLE_TEST_FAULTS: "devnet", ANCHOR_PROVIDER_URL: "https://api.mainnet.solana.com" }));
+});
+
 test("cancellation recovers a lost submission response without refunding twice", async () => {
   let status = "pending";
   let submissions = 0;

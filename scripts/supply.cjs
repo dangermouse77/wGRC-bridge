@@ -115,7 +115,6 @@ async function main() {
   console.log(`Mint: ${mint}`);
   for (const [label, amount] of [
     ["Total minted", minted],
-    ["Locked in pending withdrawals", locked],
     ["Total burned", minted - supply],
     ["Circulating (minted - burned)", supply],
     ["Supply outside pending escrow", supply - locked],
@@ -131,6 +130,7 @@ async function main() {
     ? `Locked in pending deposits: ${formatAmount(pending.total, 8)} GRC (${pending.total} base units; ${pending.count} unspent deposits)`
     : "Locked in pending deposits: not checked (use --pending-deposits with reserve-wallet RPC)");
   if (pending) console.log(`Gridcoin snapshot tip: ${pending.tip}; includes unconfirmed deposits visible to the wallet.`);
+  console.log(`Locked in pending withdrawals: ${formatAmount(locked, decimals)} wGRC (${locked} base units)`);
   console.log(payouts
     ? `GRC payouts awaiting confirmation: ${formatAmount(payouts.total, 8)} GRC (${payouts.count} ${payouts.count === 1 ? "payout" : "payouts"}; ${payouts.confirmations.length ? payouts.confirmations.map((n) => `${n} of ${payouts.minimum}`).join(", ") : `required: ${payouts.minimum}`} confirmations)`
     : "GRC payouts awaiting confirmation: not checked (use --pending-payouts)");

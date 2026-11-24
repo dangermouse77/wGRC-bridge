@@ -9,6 +9,37 @@ const pending = async () => "pending";
 const unexpected = async () => assert.fail("Unexpected broadcast or settlement.");
 const missing = Object.assign(new Error("Transaction not found"), { rpcCode: -5 });
 
+test("injected settlement response loss recovers without another burn", async () => {
+  const names = ["WGRC_ENABLE_TEST_FAULTS", "WGRC_TEST_LOST_SETTLEMENT_RESPONSE", "ANCHOR_PROVIDER_URL"];
+  const saved = names.map((name) => process.env[name]);
+  let state = "pending";
+  let burns = 0;
+  const rpc = async (method) => { assert.equal(method, "getrawtransaction"); return { txid, confirmations: 6, blockhash }; };
+  try {
+    process.env.WGRC_ENABLE_TEST_FAULTS = "devnet";
+    process.env.WGRC_TEST_LOST_SETTLEMENT_RESPONSE = "1";
+    process.env.ANCHOR_PROVIDER_URL = "https://api.devnet.solana.com";
+    await assert.rejects(advancePayout(rpc, payout, 6, async () => state, async () => {
+      burns++; state = "settled"; return "signature";
+    }), /simulating lost settlement response/);
+    delete process.env.WGRC_TEST_LOST_SETTLEMENT_RESPONSE;
+    const recovered = await advancePayout(rpc, payout, 6, async () => state, unexpected);
+    assert.equal(recovered.txid, txid);
+    assert.equal(recovered.blockHash, blockhash);
+    assert.equal(recovered.signature, null);
+    assert.equal(burns, 1);
+  } finally {
+    names.forEach((name, i) => { if (saved[i] === undefined) delete process.env[name]; else process.env[name] = saved[i]; });
+  }
+});
+
+test("settlement fault requires Devnet opt-in", () => {
+  const { validateSettlementFault } = require("../relayer/test-settlement-fault.cjs");
+  assert.equal(validateSettlementFault({}), false);
+  assert.throws(() => validateSettlementFault({ WGRC_TEST_LOST_SETTLEMENT_RESPONSE: "1" }));
+  assert.throws(() => validateSettlementFault({ WGRC_TEST_LOST_SETTLEMENT_RESPONSE: "1", WGRC_ENABLE_TEST_FAULTS: "devnet", ANCHOR_PROVIDER_URL: "mainnet" }));
+});
+
 test("injected lost broadcast response recovers without another payment", async () => {
   const names = ["WGRC_ENABLE_TEST_FAULTS", "WGRC_TEST_LOST_BROADCAST_RESPONSE", "ANCHOR_PROVIDER_URL"];
   const saved = names.map((name) => process.env[name]);

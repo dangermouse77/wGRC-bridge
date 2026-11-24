@@ -121,11 +121,13 @@ async function advancePayout(rpc, payout, minimum, verifyPending, settle, previo
     assert.equal(tx.blockhash, previousBlockHash, "Previously settled payout changed Gridcoin blocks.");
   }
   const signature = current === "pending" ? await settle() : null;
+  if (current === "pending") require("./test-settlement-fault.cjs").afterSettlement(signature);
   return { txid: payout.txid, confirmations, blockHash: tx.blockhash, signature };
 }
 
 async function main() {
   require("./test-broadcast-fault.cjs").validateBroadcastFault();
+  require("./test-settlement-fault.cjs").validateSettlementFault();
   const [mode, reserveAddress, minimumArg, input] = process.argv.slice(2);
   assert.ok(["prepare", "advance", "cancel"].includes(mode), "Expected prepare, advance or cancel mode.");
   const minimum = Number(minimumArg);

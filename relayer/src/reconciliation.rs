@@ -14,7 +14,10 @@ pub fn payout_records(db: &mut Client, reserve: &str, minimum: &str) -> Result<(
          WHERE p.reserve_address = $1 AND p.settled_at IS NULL", &[&reserve],
     )?.get(0);
     let records: serde_json::Value = serde_json::from_str(&records)?;
-    println!("{}", serde_json::json!({ "minimumConfirmations": minimum, "payouts": records }));
+    let cancellations: Vec<String> = db.query(
+        "SELECT withdrawal_address FROM wgrc.redemption_cancellations", &[]
+    )?.iter().map(|row| row.get(0)).collect();
+    println!("{}", serde_json::json!({ "minimumConfirmations": minimum, "payouts": records, "cancellations": cancellations }));
     Ok(())
 }
 

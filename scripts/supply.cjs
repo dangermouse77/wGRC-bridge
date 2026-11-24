@@ -132,8 +132,9 @@ async function main() {
     : "Locked in pending deposits: not checked (use --pending-deposits with reserve-wallet RPC)");
   if (pending) console.log(`Gridcoin snapshot tip: ${pending.tip}; includes unconfirmed deposits visible to the wallet.`);
   console.log(payouts
-    ? `GRC payouts awaiting confirmation: ${formatAmount(payouts.total, 8)} GRC (${payouts.count} payouts; fewer than ${payouts.minimum} confirmations)`
+    ? `GRC payouts awaiting confirmation: ${formatAmount(payouts.total, 8)} GRC (${payouts.count} ${payouts.count === 1 ? "payout" : "payouts"}; ${payouts.confirmations.length ? payouts.confirmations.map((n) => `${n} of ${payouts.minimum}`).join(", ") : `required: ${payouts.minimum}`} confirmations)`
     : "GRC payouts awaiting confirmation: not checked (use --pending-payouts)");
+  if (payouts) console.log(`GRC payouts awaiting in queue: ${payouts.queued ?? "unknown (rebuild the relayer to include cancellation intents)"}`);
   if (payouts?.unobserved) console.log(`Saved payouts not found on Gridcoin: ${payouts.unobserved} (excluded; broadcast status unknown, inspect recovery).`);
 }
 

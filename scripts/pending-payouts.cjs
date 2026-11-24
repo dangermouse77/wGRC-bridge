@@ -7,6 +7,14 @@ async function pendingPayouts(records, withdrawals, lookup, validate) {
   let total = 0n;
   let count = 0;
   let unobserved = 0;
+  const confirmations = [];
+  const prepared = new Set(records.payouts.map((payout) => payout.withdrawalAddress));
+  const cancellations = new Set(records.cancellations ?? []);
+  // Older binaries do not expose cancellation intents: don't guess a queue count.
+  const queued = Array.isArray(records.cancellations)
+    ? [...withdrawals].filter(([address, withdrawal]) => withdrawal.status === "pending"
+      && !prepared.has(address) && !cancellations.has(address)).length
+    : null;
   const seen = new Set();
   for (const payout of records.payouts) {
     assert.ok(!seen.has(payout.txid), "Duplicate payout record.");
@@ -26,8 +34,9 @@ async function pendingPayouts(records, withdrawals, lookup, validate) {
     if (tx.confirmations < minimum) {
       total += BigInt(payout.amountBaseUnits);
       count++;
+      confirmations.push(tx.confirmations);
     }
   }
-  return { total, count, unobserved, minimum };
+  return { total, count, unobserved, minimum, confirmations, queued };
 }
 module.exports = { pendingPayouts };

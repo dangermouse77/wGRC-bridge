@@ -797,7 +797,7 @@ Completion states below incorporate the recorded live results above.
 - [x] Verify rejection at five confirmations and minting at the six-confirmation boundary, with replay protection.
 - [x] Test complete Gridcoin-to-Solana CLI flow with sequential manual processing.
 - [x] Test complete Solana-to-Gridcoin CLI flow with sequential manual processing.
-- [ ] Test failures, restarts, and duplicate prevention.
+- [x] Test failures, restarts, and duplicate prevention in the live pilot through worker timeout recovery, service restarts with pending work, and replay after lost payout, settlement, and mint responses.
 
 ### Phase 5 — External Wallet Integration
 

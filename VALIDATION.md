@@ -279,7 +279,7 @@ consistency guard, not automatic retry (which was not tested here).
 This test completed with the original 10-confirmation threshold. The development
 default was subsequently reduced to 6 for future tests; historical results above
 remain 10-confirmation results. Subsequent redemption and reporting verification
-at 6 confirmations is recorded below; deposit minting at the new boundary remains pending.
+at 6 confirmations and deposit minting at the new boundary are recorded below.
 
 ### Cancellation coordination and six-confirmation redemption
 
@@ -652,6 +652,27 @@ with no excess mint, burn or payment. Individual deposit/withdrawal identifiers
 and both full worker logs were not supplied for independent per-request review.
 It is not sustained-load, throughput, or exhaustive interleaving validation.
 
+### Six-confirmation deposit minting (2026-11-26)
+
+The operator submitted a 1 GRC Gridcoin Testnet deposit with txid
+`27f70151a2ae9f6056174d13c7b878c69e7ca1fbfa44f54e2ca4c2f952d8c579`.
+At Gridcoin height 3347806, the wallet and relayer both reported five
+active-chain confirmations. The relayer refused to mint, outstanding supply
+stayed at 856 wGRC, and the report showed 1 GRC pending.
+
+The retry minted 1 wGRC on Solana Devnet. The post-mint Gridcoin snapshot
+was at height 3347807, whose parent was the five-confirmation tip. This
+establishes the six-confirmation boundary from the recorded chain snapshots.
+Replaying the same deposit returned the same receipt
+`D33UiMpf9ycoB8YsQd4eM5XcJJBvHynsgWPKzH6vwSpg` and mint signature
+`3cQZ7twrByXLUTsrfttxqTci8dRDKMddEs97vY8jaSWAXmSGxfnTtWZEEVSvHq7tWWuq6XxM1TQ5CMfe9a5RtFya`.
+
+Outstanding supply rose to 857 wGRC and total minted rose to 881.00000004
+wGRC. Total burned stayed at 24.00000004 wGRC. The reserve rose from
+1,856.979 to 1,857.979 GRC, and the pending deposit cleared. Reconciliation
+at finalized Solana slot 526551175 returned `reconciled` with no open
+issues or shortfalls.
+
 ### Scope still outstanding
 
 - Sustained workloads and forced failures with multiple daemon instances.
@@ -726,7 +747,7 @@ Completion states below incorporate the recorded live results above.
 - [x] Verify recovery after simulated loss of a finalized Solana settlement response, with unchanged payout txid, expected accounting and operator-confirmed 1 GRC receipt.
 - [x] Obtain operator confirmation of the destination-wallet receipt for the lost-broadcast-response test (1 GRC received).
 - [x] Verify development redemption settlement and reporting with the new 6-confirmation default.
-- [ ] Verify deposit minting at the new 6-confirmation boundary.
+- [x] Verify rejection at five confirmations and minting at the six-confirmation boundary, with replay protection.
 - [x] Test complete Gridcoin-to-Solana CLI flow with sequential manual processing.
 - [x] Test complete Solana-to-Gridcoin CLI flow with sequential manual processing.
 - [ ] Test failures, restarts, and duplicate prevention.

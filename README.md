@@ -609,11 +609,22 @@ coordination requires migration 005 above.
 - [x] Protect unminted deposit outputs from relayer payout input selection, including deposits not yet discovered by the watcher.
 - [ ] Publish operational documentation.
 
-### Phase 5 - Wallet Integration
+### Phase 5 — External Wallet Integration
 
-- create a wgrc-deposit.sh as a Bash Shell script that sends X deposit GRC to mint X wGRC on a Solana address Y using a local wallet gridcoinresearchd (sign raw transaction with magic address Y, then broadcast it)
-- create the same script as above, but as a Python script and name it wgrc-deposit.py
-- integrate Phantom Wallet with a published "GitHub Pages" that signs a Solana transaction to burn X wGRC and send X GRC to a target wallet  
+Users sign and submit bridge transactions through their own wallets outside the
+relayer. The relayer monitors both chains and handles minting, reserve payouts,
+and withdrawal settlement. User wallet keys stay with the wallets.
+
+- [ ] Create `wgrc-deposit.sh` (Bash) and `wgrc-deposit.py` (Python). Both
+  scripts build a GRC deposit to the bridge reserve with the recipient’s Solana
+  address in the deposit payload, then use the user’s `gridcoinresearchd`
+  wallet to sign and broadcast the transaction. The relayer validates the
+  confirmed deposit and mints wGRC to the specified recipient.
+- [ ] Publish a withdrawal page on GitHub Pages that connects to Phantom. The
+  user enters the wGRC amount and destination Gridcoin address, then approves
+  the Solana transaction in Phantom to lock wGRC in escrow. The relayer
+  processes the GRC payout and settles the withdrawal after payout confirmation,
+  burning the escrowed wGRC as part of settlement.
 
 ### Phase 6 — Production Readiness
 

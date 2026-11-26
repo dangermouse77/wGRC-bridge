@@ -6,5 +6,8 @@
   "password": "replace-with-dev-password",
   "solana_program_upgrade_authority": "FWakmcaVqecEfFbxJKang1KoTp6A6JMJ1LSVygLx1JQC",
   "gridcoin_deposit_address": "mxaRNFnUR9FwxS1Zp2EeWjwpAJ95g1wdgz",
-  "wgrc_mint_address": "4cwiLPuXXsYqsWJCWi31HYSJVWpGMj7YySxAj3HTgF8S"
+  "wgrc_mint_address": "4cwiLPuXXsYqsWJCWi31HYSJVWpGMj7YySxAj3HTgF8S",
+  "GRC_BRIDGE_RPC_URL": "http://gridtestbridge:25715",
+  "GRC_BRIDGE_RPC_USER": "dangermousebridge",
+  "GRC_BRIDGE_RPC_PASSWORD": ""
 }

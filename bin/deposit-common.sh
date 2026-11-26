@@ -22,7 +22,13 @@ if [[ -z "$reserve" ]]; then
   ' -- "$script_dir/../relayer/bridge.dev.json" "$script_dir/../relayer/bridge.dev.example.json")"
 fi
 
+if [[ ${WGRC_RPC_ROLE:-bridge} == bridge ]]; then
+  GRC_RPC_URL="$(node "$script_dir/../scripts/bridge-rpc-config.cjs" GRC_RPC_URL)" || exit 1
+  GRC_RPC_USER="$(node "$script_dir/../scripts/bridge-rpc-config.cjs" GRC_RPC_USER)" || exit 1
+  GRC_RPC_PASSWORD="$(node "$script_dir/../scripts/bridge-rpc-config.cjs" GRC_RPC_PASSWORD)" || exit 1
+fi
 if [[ -z ${GRC_RPC_PASSWORD:-} ]]; then
+  if [[ ! -t 0 ]]; then echo 'Configure the RPC password for noninteractive operation.' >&2; exit 1; fi
   read -rsp 'Gridcoin RPC password: ' GRC_RPC_PASSWORD
   echo >&2
 fi

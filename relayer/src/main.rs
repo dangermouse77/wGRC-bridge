@@ -95,6 +95,7 @@ fn node<T: DeserializeOwned>(script: &str, args: &[&str]) -> Result<T> {
 
 fn node_command(script: &str, args: &[&str]) -> Command {
     let mut command = Command::new("node");
+    command.env("WGRC_RPC_ROLE", "bridge");
     command.arg("relayer/worker.cjs").arg(script).args(args).env_remove("DATABASE_URL");
     command
 }

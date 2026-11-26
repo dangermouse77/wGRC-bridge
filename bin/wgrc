@@ -46,9 +46,6 @@ case "$1" in
       echo 'Build the relayer first: cargo build --release -p wgrc-relayer' >&2; exit 1
     fi
     if (( $# > 1 )); then
-      if [[ -z ${GRC_RPC_PASSWORD:-} && ! -t 0 ]]; then
-        echo 'Set GRC_RPC_PASSWORD for reserve-wallet inspection.' >&2; exit 1
-      fi
       source "$root/bin/deposit-common.sh"
       export WGRC_TESTNET_RESERVE_ADDRESS="$reserve"
     fi ;;
@@ -61,10 +58,8 @@ case "$1" in
 esac
 case "$1" in
   withdraw|deposit|broadcast-deposit|serve|watch-gridcoin|process-deposit|process-redemption|process-redemptions|recover-redemptions|reconcile-reserve)
-    if [[ -z ${GRC_RPC_PASSWORD:-} && ! -t 0 ]]; then
-      echo 'Set GRC_RPC_PASSWORD for noninteractive operation.' >&2
-      exit 1
-    fi
+    WGRC_RPC_ROLE=bridge
+    if [[ "$1" == deposit || "$1" == broadcast-deposit ]]; then WGRC_RPC_ROLE=funding; fi
     source "$root/bin/deposit-common.sh"
     export WGRC_TESTNET_RESERVE_ADDRESS="$reserve"
     ;;

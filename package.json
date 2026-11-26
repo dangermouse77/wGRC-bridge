@@ -2,6 +2,7 @@
   "name": "wgrc-bridge-tests",
   "private": true,
   "scripts": {
+    "build:withdraw": "node clients/withdraw/build.cjs",
     "supply": "node scripts/supply.cjs",
     "test": "node --test tests/bridge.cjs",
     "test:devnet": "node --test tests/devnet.cjs"

@@ -622,11 +622,12 @@ and withdrawal settlement. User wallet keys stay with the wallets.
   address in the deposit payload, then use the user’s `gridcoinresearchd`
   wallet to sign and broadcast the transaction. The relayer validates the
   confirmed deposit and mints wGRC to the specified recipient.
-- [ ] Publish a withdrawal page on GitHub Pages that connects to Phantom. The
+- [x] Implement a withdrawal page that connects to Phantom. The
   user enters the wGRC amount and destination Gridcoin address, then approves
   the Solana transaction in Phantom to lock wGRC in escrow. The relayer
   processes the GRC payout and settles the withdrawal after payout confirmation,
   burning the escrowed wGRC as part of settlement.
+- [ ] Publish the built withdrawal page on GitHub Pages.
 
 The user-facing clients live under `clients/`:
 
@@ -635,10 +636,12 @@ clients/
 ├── deposit/
 │   ├── wgrc-deposit.sh
 │   └── wgrc-deposit.py
-└── withdraw/              # Planned GitHub Pages source
+└── withdraw/
     ├── index.html
     ├── withdraw.js
-    └── styles.css
+    ├── styles.css
+    ├── protocol.mjs
+    └── build.cjs
 ```
 
 Both deposit entry points use the same transaction code from this checkout.
@@ -670,6 +673,25 @@ directory before broadcasting. If broadcast is uncertain, run the same
 client with `retry deposits/<txid>.json`. It looks for the original txid and
 rebroadcasts the saved bytes if needed. The [Phase 5 validation plan](VALIDATION.md#phase-5--external-wallet-integration)
 covers the live client runs.
+
+Build the Phantom withdrawal page with the repository's npm dependencies installed:
+
+```bash
+npm run build:withdraw
+python3 -m http.server 8080 --bind 127.0.0.1 --directory target/withdraw-page
+```
+
+Open `http://localhost:8080` in a browser with Phantom. Select Solana Devnet in
+Phantom and use a wallet funded with Devnet SOL and wGRC. Enter the amount and a
+Gridcoin Testnet payout address, then approve the transaction in Phantom.
+The page checks the Solana RPC network before signing and saves the withdrawal
+account in this browser so a reload can recover or retry the same request.
+
+Publish the contents of `target/withdraw-page/` as the GitHub Pages artifact.
+The build copies the pinned Solana browser library into that directory so the
+published page serves its JavaScript from the same origin. It uses public
+Devnet RPC and public bridge addresses. No Anchor build or operator
+configuration is required for the withdrawal page.
 
 ### Phase 6 — Production Readiness
 

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Withdraw Devnet wGRC to a Gridcoin Testnet wallet.">
+  <title>Withdraw wGRC | Gridcoin Bridge</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script defer src="./vendor/solana-web3.min.js"></script>
+  <script type="module" src="./withdraw.js"></script>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <span class="brand"><span class="mark" aria-hidden="true">G</span> Gridcoin Bridge</span>
+      <span class="network"><span></span> Test networks</span>
+    </header>
+    <div class="layout">
+      <section class="intro" aria-labelledby="title">
+        <h1 id="title">Withdraw<br><em>wGRC.</em></h1>
+        <p>Lock wGRC on Solana Devnet and receive GRC at your Gridcoin Testnet address.</p>
+        <div class="route">
+          <div><span>Send from</span><strong>Solana Devnet</strong></div>
+          <span class="arrow" aria-hidden="true">↗</span>
+          <div><span>Receive on</span><strong>Gridcoin Testnet</strong></div>
+        </div>
+      </section>
+      <section class="card" aria-label="Withdrawal request">
+        <div class="wallet">
+          <div><strong>Phantom wallet</strong><span id="wallet-label">Disconnected</span></div>
+          <button id="connect" type="button">Connect Phantom</button>
+        </div>
+        <form id="withdraw-form">
+          <label for="amount">Amount</label>
+          <div class="field unit"><input id="amount" required inputmode="decimal" maxlength="21" placeholder="0.00" autocomplete="off"><span>wGRC</span></div>
+          <label for="destination">Gridcoin Testnet address</label>
+          <div class="field"><input id="destination" required maxlength="35" placeholder="Enter recipient address" autocomplete="off" autocapitalize="none" spellcheck="false"></div>
+          <p class="hint">Phantom will ask you to approve the escrow transaction. Your wallet needs Devnet SOL for fees and account rent.</p>
+          <button class="primary" id="submit" type="submit" disabled>Request withdrawal</button>
+        </form>
+        <section id="saved-request" class="saved" aria-label="Saved request" hidden>
+          <dl>
+            <dt>Withdrawal account</dt><dd id="request-address"></dd>
+            <dt>Gridcoin destination</dt><dd id="request-destination"></dd>
+            <dt>Solana transaction</dt><dd id="request-signature"></dd>
+          </dl>
+          <div class="actions">
+            <button id="check" type="button">Check status</button>
+            <button id="retry" type="button">Retry saved request</button>
+            <button id="new-request" type="button" hidden>New withdrawal</button>
+          </div>
+        </section>
+        <p id="status" class="status" role="status" aria-live="polite"></p>
+        <noscript>Enable JavaScript to use Phantom and request a withdrawal.</noscript>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

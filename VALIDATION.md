@@ -336,11 +336,29 @@ respectively. Both reconciliation reports retained four acknowledged historical
 issues in required backing of 862.00000004 GRC, giving surplus of
 1,000.99199996 GRC.
 
-These runs verify safe cancellation-winning outcomes with concurrently launched
-commands. They do not prove every internal timing interleaving: a concurrent
-payout-winning run and cancellation during settlement remain untested. The
-sequential payout-first case above is distinct from those races. Subsequent
-timeout coverage is recorded below.
+These runs verify cancellation-winning outcomes with concurrently launched
+commands.
+
+**Concurrent payout-winning attempt.** On 2026-11-26, the operator launched
+cancellation against a fresh 1 wGRC withdrawal while payout processing was
+still running, after a 0.25-second head start for payout processing. Payout
+processing exited 0 with a saved payout at zero confirmations. Cancellation
+exited 1 and reported that the saved payout blocked cancellation.
+
+Withdrawal `7XtHJYMdmw98paHB6r7DXYFGSqhTdyVwq4jcWALSSkrG` settled at six
+confirmations using payout
+`154898ab6c842e5f5ec4865af62a25c64f8289ca4d499e6e6d118da7e87c1a47`.
+A retry returned the same payout txid and settlement signature
+`4A4WauN4dFkeDK4tETmAW9TfkaJMZq3BpMaDxftUtjatkiW79AWpk9CRAisYmguYx4Dft93E6UgbQCZtp5mMj7Qj`.
+
+Outstanding supply fell from 858 to 857 wGRC and total burned increased from
+22.00000004 to 23.00000004 wGRC. Total minted remained 880.00000004 wGRC.
+Reserve fell from 1,858.981 to 1,857.980 GRC, consistent with one 1 GRC payout
+plus a 0.001 GRC fee. All pending balances and the payout queue were zero.
+Reconciliation at finalized slot 526523897 returned `reconciled` with no
+open issues or shortfalls. The supplied evidence covers command overlap and
+settlement accounting. Destination-wallet receipt was not independently
+confirmed, and cancellation during settlement was not exercised.
 
 ### Two service instances processing the same requests
 
@@ -615,7 +633,7 @@ It is not sustained-load, throughput, or exhaustive interleaving validation.
 ### Scope still outstanding
 
 - Sustained workloads and forced failures with multiple daemon instances.
-- Concurrent payout-winning cancellation race and cancellation during settlement.
+- Cancellation during settlement.
 - Forced worker timeouts and crashes at signing, broadcast, and database commit boundaries.
 - Reorganizations and ambiguous RPC responses during overlapping operations.
 - Sustained load and controlled crash injection during mixed workloads.
@@ -675,7 +693,8 @@ Completion states below incorporate the recorded live results above.
 - [x] Verify concurrent cancellation-winning processing (two live runs).
 - [x] Verify two service instances sharing the database and reserve for one 2 GRC deposit and one 1 wGRC withdrawal, with expected totals, received payout and clean reconciliation.
 - [x] Verify a five-deposit/five-withdrawal batch with two services, drained queue, expected accounting, five operator-confirmed payments and clean reconciliation.
-- [ ] Verify concurrent payout-winning races and settlement races.
+- [x] Verify concurrent payout-winning cancellation with same-transaction settlement and clean reconciliation.
+- [ ] Verify cancellation during settlement.
 - [x] Verify controlled timeout before advancement of a saved unfinished payout, followed by same-transaction recovery and reconciled settlement.
 - [x] Verify overlapping deposits and withdrawals live through one service (2 + 3 GRC deposits; 1 + 2 wGRC withdrawals).
 - [x] Verify service restart recovery of an awaiting-confirmation payout with the same transaction ID and expected final supply.
@@ -697,7 +716,7 @@ Completion states below incorporate the recorded live results above.
 
 The supervised service deployment milestone remains in the README. Live service
 operation and overlapping flows have the pilot coverage recorded above;
-the remaining cancellation/payout interleavings, timeouts at other failure boundaries, and broader
+the cancellation-during-settlement case, timeouts at other failure boundaries, and broader
 fault recovery remain open.
 Additional service test steps are
 in [the operating guide](docs/bridge-service.md#validation-before-unattended-payouts).

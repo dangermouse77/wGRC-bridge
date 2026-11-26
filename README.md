@@ -569,6 +569,12 @@ or bypass this command with direct operator cancellation transactions.
 This coordination requires all workers to use the updated relayer and the same
 database; it does not change the smart contract or restrict direct operator calls.
 
+Live Gridcoin Testnet and Solana Devnet runs verified both cancellation-winning
+and payout-winning outcomes with overlapping commands. In the payout-winning
+run, cancellation was refused, the saved payout settled at six confirmations,
+and reconciliation found no open issues or shortfalls. Cancellation during
+settlement remains open. See the [live cancellation results](VALIDATION.md#cancellation-coordination-and-six-confirmation-redemption).
+
 Node workers have a 120-second deadline, configurable with
 `WGRC_WORKER_TIMEOUT_SECONDS` (1–3600). The supervisor terminates timed-out
 workers and their process tree, including on Linux `solchain`. Database lock

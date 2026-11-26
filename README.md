@@ -609,14 +609,20 @@ coordination requires migration 005 above.
 - [x] Protect unminted deposit outputs from relayer payout input selection, including deposits not yet discovered by the watcher.
 - [ ] Publish operational documentation.
 
-### Phase 5 — Production Readiness
+### Phase 5 - Wallet Integration
+
+- create a wgrc-deposit.sh as a Bash Shell script that sends X deposit GRC to mint X wGRC on a Solana address Y using a local wallet gridcoinresearchd (sign raw transaction with magic address Y, then broadcast it)
+- create the same script as above, but as a Python script and name it wgrc-deposit.py
+- integrate Phantom Wallet with a published "GitHub Pages" that signs a Solana transaction to burn X wGRC and send X GRC to a target wallet  
+
+### Phase 6 — Production Readiness
 
 - [ ] Review custody and key management.
 - [ ] Define operator governance.
 - [ ] Establish monitoring and recovery procedures.
 - [ ] Deploy to production after readiness approval.
 
-### Phase 6 — Ecosystem Integration
+### Phase 7 — Ecosystem Integration
 
 - [x] Publish token metadata on Solana Devnet.
 - [ ] Publish production token metadata after the mainnet mint is deployed.

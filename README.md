@@ -644,28 +644,34 @@ clients/
     └── build.cjs
 ```
 
-Both deposit entry points use the same transaction code from this checkout.
-Install the repository dependencies with `npm ci` if you have a lockfile, or
-`npm install` otherwise. Use Node.js 22 or newer and provide the public bridge
-IDL at `target/idl/wgrc_bridge.json` for the read-only Devnet supply-cap check.
-The IDL can be generated with `anchor build` or copied from a matching bridge
-build. Use Bash or Python 3 for the corresponding entry point.
-
-Set the public Testnet reserve address and the RPC settings for your own
-funded Gridcoin Testnet wallet. The RPC URL defaults to
-`http://127.0.0.1:25715`. These commands use the wallet RPC for signing.
+The Bash script can run on its own with Bash 4.4 or newer,
+`gridcoinresearchd`, `jq`, `curl`, `openssl`, `xxd`, and `base64`.
+Run it where `gridcoinresearchd -testnet` can reach your funded wallet
+using your Gridcoin configuration. Set `GRC_CLI` or `GRC_CONF` to select a
+different executable or configuration file. The script uses
+`createrawtransaction`, then funds, signs, and broadcasts through that
+wallet. It checks the supply cap using public Solana Devnet RPC.
 
 ```bash
 export WGRC_TESTNET_RESERVE_ADDRESS='<public Testnet bridge reserve address>'
+recipient='<your Solana Devnet public key>'
+bash clients/deposit/wgrc-deposit.sh 1 --solana-address "$recipient"
+```
+
+The Python entry point uses the Node.js deposit code from this checkout.
+Install the repository dependencies and use Python 3 and Node.js 22 or newer.
+Provide the public bridge IDL at `target/idl/wgrc_bridge.json` for the
+read-only Devnet supply-cap check. Generate it with `anchor build` or copy
+it from a matching bridge build. Set the public reserve address as above
+and use the RPC credentials for your funded Gridcoin Testnet wallet.
+The default RPC URL is `http://127.0.0.1:25715`.
+
+```bash
 export GRC_RPC_USER='<your wallet RPC username>'
 read -rsp 'Gridcoin RPC password: ' GRC_RPC_PASSWORD
 export GRC_RPC_PASSWORD
 echo
-recipient='<your Solana Devnet public key>'
-
-# Choose one command for each new deposit.
-bash clients/deposit/wgrc-deposit.sh 1 --solana-address "$recipient"
-# python3 clients/deposit/wgrc-deposit.py 1 --solana-address "$recipient"
+python3 clients/deposit/wgrc-deposit.py 1 --solana-address "$recipient"
 ```
 
 The client saves the signed transaction under `deposits/` in your working

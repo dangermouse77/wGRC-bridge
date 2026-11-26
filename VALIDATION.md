@@ -703,7 +703,22 @@ is expected because recovery finds the finalized receipt and the original
 signature never reached the database. The fault message retains the signature.
 Expect a single 1 wGRC increase from baseline with no further increase after
 the retries, zero pending deposits after recovery, and clean reconciliation.
-Live results are pending.
+**Live result (2026-11-26).** The operator ran the fault against deposit
+`05ff30e8538ad3f81a8ac0a15ed86293f49818a4765c79d84c1378c4909ba98a`.
+The worker reported finalized mint signature
+`4hEiMyXVrhkrJHCjndVTHaHyB6EzU14moNgwxxK6hkw2xppKmz54L6PWVS8c33b6H2GEcbEg5FArkZmgRDTnbYQM`
+and receipt `2NtbsaWjbUVYwuigeABYaE3AphYH271BTFnbnaCQRQGp` before returning
+the injected error. Both normal retries returned that receipt with
+`signature: null`.
+
+After the fault, total minted had increased from 881.00000004 to
+882.00000004 wGRC and outstanding supply from 857 to 858 wGRC. Both stayed
+at those values after the retries, and total burned stayed at 24.00000004
+wGRC. The reserve increased by 1 GRC to 1,858.979 GRC. The pending-deposit
+report was already zero after the fault and remained zero after recovery.
+Reconciliation at finalized Solana slot 526559893 returned `reconciled`
+with no open issues or shortfalls. This verifies recovery from a lost
+finalized mint response with no duplicate mint.
 
 ### Scope still outstanding
 
@@ -774,7 +789,7 @@ Completion states below incorporate the recorded live results above.
 - [x] Verify overlapping deposits and withdrawals live through one service (2 + 3 GRC deposits; 1 + 2 wGRC withdrawals).
 - [x] Verify service restart recovery of an awaiting-confirmation payout with the same transaction ID and expected final supply.
 - [x] Verify repeated service interruptions/restarts during a mixed-flow workload, with expected totals and two separately received payouts.
-- [ ] Verify fault-injected duplicate prevention at controlled failure boundaries.
+- [x] Verify fault-injected duplicate prevention after accepted payout broadcast, finalized settlement, and finalized mint.
 - [x] Verify same-payout recovery and reconciled settlement after simulated loss of an accepted Gridcoin broadcast response.
 - [x] Verify recovery after simulated loss of a finalized Solana settlement response, with unchanged payout txid, expected accounting and operator-confirmed 1 GRC receipt.
 - [x] Obtain operator confirmation of the destination-wallet receipt for the lost-broadcast-response test (1 GRC received).

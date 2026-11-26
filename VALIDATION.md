@@ -709,7 +709,26 @@ Completion states below incorporate the recorded live results above.
 - [x] Test complete Solana-to-Gridcoin CLI flow with sequential manual processing.
 - [ ] Test failures, restarts, and duplicate prevention.
 
-### Phase 5 — Production Readiness
+### Phase 5 — External Wallet Integration
+
+Run these cases on Gridcoin Testnet and Solana Devnet with funded user wallets
+separate from the bridge operator’s wallets.
+
+| Status | Test | Expected result |
+| --- | --- | --- |
+| [ ] | Submit a deposit with `wgrc-deposit.sh` and a separate deposit with `wgrc-deposit.py`. | Each script uses the user’s `gridcoinresearchd` wallet to sign and broadcast a payment to the configured reserve. The v1 `OP_RETURN` encodes the specified Solana recipient. Each deposit mints the corresponding wGRC amount exactly once after the configured Gridcoin confirmation threshold. |
+| [ ] | Try an invalid Solana recipient, a nonpositive amount, and an amount the Gridcoin wallet cannot fund. | Both scripts report the error and create no on-chain payment. |
+| [ ] | Simulate a lost broadcast response after Gridcoin accepts a deposit from each script. | Recover by looking up or rebroadcasting the same signed transaction. Confirm one reserve payment and one mint per deposit. |
+| [ ] | Connect Phantom to the published GitHub Pages withdrawal page and approve a withdrawal. | Phantom signs with the token owner’s wallet. The Solana request records the specified Gridcoin destination and locks the requested wGRC in escrow. The destination receives the expected GRC payout. After the configured Gridcoin payout confirmations, settlement burns the escrowed wGRC and marks the request settled. |
+| [ ] | Reject the Phantom signing prompt, submit an invalid Gridcoin address, and attempt to withdraw with a wrong-network configuration. | Each attempt leaves the user’s token balance and bridge state unchanged. |
+| [ ] | Reload the withdrawal page after an uncertain submission and recover the original request. | The original request can be identified by its transaction signature or withdrawal address. Recovery produces one escrow lock and one GRC payout. |
+| [ ] | Submit deposits and withdrawals from a client environment with only the user wallets and public bridge configuration. | User signing stays in the respective wallets. The client accesses no operator keys, reserve-wallet RPC credentials, or PostgreSQL credentials. |
+
+Record deposit and payout transaction IDs, Solana transaction signatures,
+confirmation counts, and the relevant balance and escrow changes for each
+completed flow.
+
+### Phase 6 — Production Readiness
 
 - [ ] Perform independent security assessment.
 - [ ] Verify reserve transparency.

@@ -617,7 +617,7 @@ Users sign and submit bridge transactions through their own wallets outside the
 relayer. The relayer monitors both chains and handles minting, reserve payouts,
 and withdrawal settlement. User wallet keys stay with the wallets.
 
-- [ ] Create `wgrc-deposit.sh` (Bash) and `wgrc-deposit.py` (Python). Both
+- [x] Create `wgrc-deposit.sh` (Bash) and `wgrc-deposit.py` (Python). Both
   scripts build a GRC deposit to the bridge reserve with the recipient’s Solana
   address in the deposit payload, then use the user’s `gridcoinresearchd`
   wallet to sign and broadcast the transaction. The relayer validates the
@@ -627,6 +627,49 @@ and withdrawal settlement. User wallet keys stay with the wallets.
   the Solana transaction in Phantom to lock wGRC in escrow. The relayer
   processes the GRC payout and settles the withdrawal after payout confirmation,
   burning the escrowed wGRC as part of settlement.
+
+The user-facing clients live under `clients/`:
+
+```text
+clients/
+├── deposit/
+│   ├── wgrc-deposit.sh
+│   └── wgrc-deposit.py
+└── withdraw/              # Planned GitHub Pages source
+    ├── index.html
+    ├── withdraw.js
+    └── styles.css
+```
+
+Both deposit entry points use the same transaction code from this checkout.
+Install the repository dependencies with `npm ci` if you have a lockfile, or
+`npm install` otherwise. Use Node.js 22 or newer and provide the public bridge
+IDL at `target/idl/wgrc_bridge.json` for the read-only Devnet supply-cap check.
+The IDL can be generated with `anchor build` or copied from a matching bridge
+build. Use Bash or Python 3 for the corresponding entry point.
+
+Set the public Testnet reserve address and the RPC settings for your own
+funded Gridcoin Testnet wallet. The RPC URL defaults to
+`http://127.0.0.1:25715`. These commands use the wallet RPC for signing.
+
+```bash
+export WGRC_TESTNET_RESERVE_ADDRESS='<public Testnet bridge reserve address>'
+export GRC_RPC_USER='<your wallet RPC username>'
+read -rsp 'Gridcoin RPC password: ' GRC_RPC_PASSWORD
+export GRC_RPC_PASSWORD
+echo
+recipient='<your Solana Devnet public key>'
+
+# Choose one command for each new deposit.
+bash clients/deposit/wgrc-deposit.sh 1 --solana-address "$recipient"
+# python3 clients/deposit/wgrc-deposit.py 1 --solana-address "$recipient"
+```
+
+The client saves the signed transaction under `deposits/` in your working
+directory before broadcasting. If broadcast is uncertain, run the same
+client with `retry deposits/<txid>.json`. It looks for the original txid and
+rebroadcasts the saved bytes if needed. The [Phase 5 validation plan](VALIDATION.md#phase-5--external-wallet-integration)
+covers the live client runs.
 
 ### Phase 6 — Production Readiness
 

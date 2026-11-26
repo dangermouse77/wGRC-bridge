@@ -13,7 +13,8 @@ function parse(args) {
   return { amount: args[0], recipient: args[2] };
 }
 
-async function deposit(options, reserve, run, directory = resolve("deposits"), log = console.error) {
+async function deposit(options, reserve, run, directory = resolve("deposits"), log = console.error,
+  externalClient = false) {
   assert.ok(reserve, "Missing configured Gridcoin reserve address.");
   const prepared = JSON.parse(await run(["create", reserve, options.amount, options.recipient]));
   assert.match(prepared.txid, /^[a-f0-9]{64}$/);
@@ -31,23 +32,44 @@ async function deposit(options, reserve, run, directory = resolve("deposits"), l
     assert.equal(result.txid, prepared.txid);
     return { ...result, depositFile: file };
   } catch (error) {
-    throw new Error(`Broadcast outcome may be uncertain. Do not create another deposit. Retry with: bash bin/wgrc broadcast-deposit '${file}'\n${error.message}`);
+    const recovery = externalClient
+      ? `Run the same client with retry and the saved file: ${file}`
+      : `Retry with: bash bin/wgrc broadcast-deposit '${file}'`;
+    throw new Error(`Broadcast outcome may be uncertain. Do not create another deposit. ${recovery}\n${error.message}`);
   }
 }
 
 async function main() {
-  const options = parse(process.argv.slice(2));
+  const args = process.argv.slice(2);
+  const usage = "Usage: wgrc-deposit AMOUNT_GRC --solana-address ADDRESS\n"
+    + "       wgrc-deposit retry DEPOSIT_JSON_FILE\n"
+    + "Set WGRC_TESTNET_RESERVE_ADDRESS and the funding wallet's GRC_RPC_USER and GRC_RPC_PASSWORD.";
+  if (args.length === 1 && ["--help", "-h"].includes(args[0])) {
+    console.log(usage);
+    return;
+  }
+  const reserve = process.env.WGRC_TESTNET_RESERVE_ADDRESS;
+  const root = resolve(__dirname, "..");
   const run = async (args) => {
     try {
       const { stdout, stderr } = await execute(process.execPath,
-        [resolve("scripts/gridcoin-deposit.cjs"), ...args], { timeout: 120000, maxBuffer: 1024 * 1024 });
+        [join(root, "scripts", "gridcoin-deposit.cjs"), ...args],
+        { timeout: 120000, maxBuffer: 1024 * 1024 });
       if (stderr) process.stderr.write(stderr);
       return stdout;
     } catch (error) {
       throw new Error(error.stderr?.trim() || error.message);
     }
   };
-  console.log(JSON.stringify(await deposit(options, process.env.WGRC_TESTNET_RESERVE_ADDRESS, run), null, 2));
+  if (args[0] === "retry") {
+    assert.equal(args.length, 2, usage);
+    assert.ok(reserve, "Missing configured Gridcoin reserve address.");
+    const file = resolve(args[1]);
+    console.log(JSON.stringify({ ...JSON.parse(await run(["recover", reserve, file])), depositFile: file }, null, 2));
+    return;
+  }
+  console.log(JSON.stringify(await deposit(parse(args), reserve, run, undefined, undefined,
+    process.env.WGRC_EXTERNAL_DEPOSIT_CLIENT === "1"), null, 2));
 }
 
 module.exports = { parse, deposit };

@@ -146,11 +146,12 @@ async function resolveGridcoinAddress(rpc, destination) {
 
 async function main() {
   const [command, reserveAddress, value, extra, ...rest] = process.argv.slice(2);
-  const broadcast = command === "broadcast";
+  const recover = command === "recover";
+  const broadcast = command === "broadcast" || recover;
   if (!reserveAddress || !value || (broadcast ? extra !== undefined : !extra) || rest.length
-      || !["create", "send", "broadcast", "check", "check-unspent"].includes(command)) {
+      || !["create", "send", "broadcast", "recover", "check", "check-unspent"].includes(command)) {
     throw new Error("Usage: gridcoin-deposit.cjs create|send RESERVE GRC SOLANA_RECIPIENT\n"
-      + "       gridcoin-deposit.cjs broadcast RESERVE DEPOSIT_JSON_FILE\n"
+      + "       gridcoin-deposit.cjs broadcast|recover RESERVE DEPOSIT_JSON_FILE\n"
       + "       gridcoin-deposit.cjs check|check-unspent RESERVE TXID MIN_CONFIRMATIONS");
   }
   const prepared = broadcast ? JSON.parse(readFileSync(value, "utf8")) : null;
@@ -173,6 +174,19 @@ async function main() {
     const record = deposit(await rpc("decoderawtransaction", prepared.signedHex), script);
     if (Object.entries(record).some(([field, actual]) => prepared[field] !== actual)) {
       throw new Error("The signed transaction does not match the deposit JSON.");
+    }
+    if (recover) {
+      const known = await rpc("getrawtransaction", record.txid, true).catch((error) => {
+        if (error.rpcCode !== -5) throw error;
+        return null;
+      });
+      if (known) {
+        if (known.txid !== record.txid) throw new Error("Gridcoin RPC returned a different transaction.");
+        if (known.confirmations > 0 || (!known.blockhash && (known.confirmations ?? 0) === 0)) {
+          console.log(JSON.stringify(record, null, 2));
+          return;
+        }
+      }
     }
     await broadcastDeposit(record, prepared.signedHex);
     console.log(JSON.stringify(record, null, 2));

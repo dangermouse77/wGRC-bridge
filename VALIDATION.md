@@ -358,7 +358,29 @@ plus a 0.001 GRC fee. All pending balances and the payout queue were zero.
 Reconciliation at finalized slot 526523897 returned `reconciled` with no
 open issues or shortfalls. The supplied evidence covers command overlap and
 settlement accounting. Destination-wallet receipt was not independently
-confirmed, and cancellation during settlement was not exercised.
+confirmed for that withdrawal.
+
+**Concurrent cancellation and settlement CLI run (2026-11-26).** The operator
+first attempted cancellation at zero confirmations. The saved payout blocked
+cancellation and processing returned `awaiting_confirmations`. At seven
+confirmations, the Gridcoin node showed that the same payout
+`9ebfb0c8478695619e728f4d0982536dc6d64ff4e714d7ae40528360628ab309` paid
+1 GRC to `mvbe9h4jqoseVL4H5BMsaM7d1ZEmJ4SFcm` with a 0.001 GRC fee.
+
+The operator reran both commands for withdrawal
+`HrWYwSwbhC7CFX5y92k3rZBbTNPguFErPMqTco6hzXg5`. The cancellation command
+started 0.253 seconds after the settlement command and exited 1 with the
+saved-payout refusal. Settlement exited 0 at seven confirmations using the
+original payout txid and Solana signature
+`295RL3TQz88GAUFBguMDSP7gffYSsQj7f5NpwwCtpr4gyvmqn81DTSYTDWjNcXgbs1gu65Nt4fhhnQ9k3ZoC8DkM`.
+The timestamps establish CLI command overlap. The timing of the cancellation
+refusal relative to Solana submission and finalization remains unverified.
+
+Outstanding supply fell from 857 to 856 wGRC and total burned increased from
+23.00000004 to 24.00000004 wGRC. Total minted remained 880.00000004 wGRC.
+Reserve fell from 1,857.980 to 1,856.979 GRC. All pending balances and the
+payout queue cleared. Reconciliation at finalized slot 526545443 returned
+`reconciled` with no open issues or shortfalls.
 
 ### Two service instances processing the same requests
 
@@ -633,7 +655,7 @@ It is not sustained-load, throughput, or exhaustive interleaving validation.
 ### Scope still outstanding
 
 - Sustained workloads and forced failures with multiple daemon instances.
-- Cancellation during settlement.
+- Exact timing of the cancellation refusal within the Solana settlement window remains unverified.
 - Forced worker timeouts and crashes at signing, broadcast, and database commit boundaries.
 - Reorganizations and ambiguous RPC responses during overlapping operations.
 - Sustained load and controlled crash injection during mixed workloads.
@@ -694,7 +716,7 @@ Completion states below incorporate the recorded live results above.
 - [x] Verify two service instances sharing the database and reserve for one 2 GRC deposit and one 1 wGRC withdrawal, with expected totals, received payout and clean reconciliation.
 - [x] Verify a five-deposit/five-withdrawal batch with two services, drained queue, expected accounting, five operator-confirmed payments and clean reconciliation.
 - [x] Verify concurrent payout-winning cancellation with same-transaction settlement and clean reconciliation.
-- [ ] Verify cancellation during settlement.
+- [x] Verify cancellation refusal while the settlement CLI command is running.
 - [x] Verify controlled timeout before advancement of a saved unfinished payout, followed by same-transaction recovery and reconciled settlement.
 - [x] Verify overlapping deposits and withdrawals live through one service (2 + 3 GRC deposits; 1 + 2 wGRC withdrawals).
 - [x] Verify service restart recovery of an awaiting-confirmation payout with the same transaction ID and expected final supply.
@@ -735,7 +757,7 @@ completed flow.
 
 The supervised service deployment milestone remains in the README. Live service
 operation and overlapping flows have the pilot coverage recorded above;
-the cancellation-during-settlement case, timeouts at other failure boundaries, and broader
+precise settlement interleavings, timeouts at other failure boundaries, and broader
 fault recovery remain open.
 Additional service test steps are
 in [the operating guide](docs/bridge-service.md#validation-before-unattended-payouts).

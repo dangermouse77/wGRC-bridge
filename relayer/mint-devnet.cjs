@@ -18,6 +18,12 @@ async function main() {
   const [mode, reserve, minimum, input, expectedMint, backingCheck] = process.argv.slice(2);
   assert.ok(mode === "mint" || mode === "verify", "Expected mint or verify mode.");
   assert.equal(process.env.ANCHOR_PROVIDER_URL, DEVNET_URL, "Set the Solana Devnet RPC URL.");
+  const lostMintResponse = process.env.WGRC_TEST_LOST_MINT_RESPONSE;
+  if (lostMintResponse !== undefined) {
+    assert.equal(lostMintResponse, "1", "Mint fault must be 1.");
+    assert.equal(process.env.WGRC_ENABLE_TEST_FAULTS, "devnet", "Mint fault requires explicit Devnet opt-in.");
+    assert.equal(mode, "mint", "Mint fault requires mint mode.");
+  }
   const deposit = JSON.parse(input);
   assert.match(deposit.depositId, /^[a-f0-9]{64}$/);
   const depositId = Buffer.from(deposit.depositId, "hex");
@@ -84,6 +90,9 @@ async function main() {
     }
     signature = await provider.sendAndConfirm(transaction);
     assert.ok(await hasMatchingReceipt(), "Mint has no finalized receipt. Retry the same deposit.");
+    if (lostMintResponse === "1") {
+      throw new Error(`Devnet test fault: mint ${signature} finalized with receipt ${depositReceipt.toBase58()}; simulating lost mint response before database finalization. Retry the same deposit without fault variables.`);
+    }
   }
   console.log(JSON.stringify({ receipt: depositReceipt.toBase58(), signature }));
 }

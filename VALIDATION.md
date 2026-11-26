@@ -673,6 +673,38 @@ wGRC. Total burned stayed at 24.00000004 wGRC. The reserve rose from
 at finalized Solana slot 526551175 returned `reconciled` with no open
 issues or shortfalls.
 
+### Controlled recovery after a finalized mint
+
+With services stopped, submit a fresh 1 GRC deposit on Gridcoin Testnet and
+wait for six confirmations. Record baseline supply before submitting it.
+On the relayer host, use the usual development database and reserve RPC
+configuration with public Solana Devnet:
+
+```bash
+WGRC_ENABLE_TEST_FAULTS=devnet WGRC_TEST_LOST_MINT_RESPONSE=1 \
+  bash bin/wgrc process-deposit "$deposit_txid"
+```
+
+Expect a nonzero exit with the finalized mint signature and receipt in the
+fault message. This stops the mint worker before it returns success to the
+relayer. The on-chain mint has finalized and the deposit row's finalization has
+yet to be recorded. Record supply after the fault, then retry the same txid:
+
+```bash
+bash bin/wgrc supply --pending-deposits --pending-payouts
+bash bin/wgrc process-deposit "$deposit_txid"
+bash bin/wgrc process-deposit "$deposit_txid"
+bash bin/wgrc supply --pending-deposits --pending-payouts
+bash bin/wgrc reconcile-reserve
+```
+
+Both retries should return the receipt from the fault message. A null signature
+is expected because recovery finds the finalized receipt and the original
+signature never reached the database. The fault message retains the signature.
+Expect a single 1 wGRC increase from baseline with no further increase after
+the retries, zero pending deposits after recovery, and clean reconciliation.
+Live results are pending.
+
 ### Scope still outstanding
 
 - Sustained workloads and forced failures with multiple daemon instances.

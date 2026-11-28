@@ -818,7 +818,7 @@ Record deposit and payout transaction IDs, Solana transaction signatures,
 confirmation counts, and the relevant balance and escrow changes for each
 completed flow.
 
-### Phase 6 — Production Readiness
+### Phase 7 — Production Readiness
 
 - [ ] Perform independent security assessment.
 - [ ] Verify reserve transparency.

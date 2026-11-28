@@ -346,6 +346,16 @@ wgrc-bridge/
 │   └── wgrc-bridge/
 │       └── src/
 │           └── lib.rs
+clients/
+├── deposit/
+│   ├── wgrc-deposit.sh
+│   └── wgrc-deposit.py
+└── withdraw/
+    ├── index.html
+    ├── withdraw.js
+    ├── styles.css
+    ├── protocol.mjs
+    └── build.cjs
 ├── cli/
 │   └── wgrc/
 ├── relayer/
@@ -699,14 +709,20 @@ published page serves its JavaScript from the same origin. It uses public
 Devnet RPC and public bridge addresses. No Anchor build or operator
 configuration is required for the withdrawal page.
 
-### Phase 6 — Production Readiness
+### Phase 6 - Faucet
+
+Develop a wGRC faucet with a Solana Smart Contract
+Develop a Github Pages for the faucet, so that everyone can claim a small amount of wGRC (between 1 and 10)
+Make the faucet so, that each address can claim only once a day
+
+### Phase 7 — Production Readiness
 
 - [ ] Review custody and key management.
 - [ ] Define operator governance.
 - [ ] Establish monitoring and recovery procedures.
 - [ ] Deploy to production after readiness approval.
 
-### Phase 7 — Ecosystem Integration
+### Phase 8 — Ecosystem Integration
 
 - [x] Publish token metadata on Solana Devnet.
 - [ ] Publish production token metadata after the mainnet mint is deployed.

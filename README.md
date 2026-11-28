@@ -709,11 +709,33 @@ published page serves its JavaScript from the same origin. It uses public
 Devnet RPC and public bridge addresses. No Anchor build or operator
 configuration is required for the withdrawal page.
 
-### Phase 6 - Faucet
+### Phase 6 — wGRC Faucet
 
-Develop a wGRC faucet with a Solana Smart Contract
-Develop a Github Pages for the faucet, so that everyone can claim a small amount of wGRC (between 1 and 10)
-Make the faucet so, that each address can claim only once a day
+Build a Solana Devnet faucet so anyone with a Solana wallet can claim wGRC
+to try transfers, withdrawals, and other test integrations. Each claim
+dispenses a configured amount between 1 and 10 wGRC. Each wallet address
+can make one successful claim per rolling 24-hour period.
+
+- [ ] **Implement the faucet program.** Fund a program-controlled token vault
+  with existing Devnet wGRC. A claim transfers tokens from the vault to the
+  signing wallet's associated token account. The faucet uses existing supply
+  and requires no bridge mint authority or Gridcoin reserve access.
+- [ ] **Enforce the claim interval on-chain.** Store the last successful claim
+  in a program-derived account keyed by wallet address. Use Solana's clock
+  to check eligibility. Update the record and transfer tokens atomically so
+  concurrent submissions can only claim once and failed claims leave the
+  wallet eligible. The limit applies per wallet address.
+- [ ] **Publish a GitHub Pages claim page.** Let users connect Phantom, see
+  the claim amount and their next eligible claim time, and approve the
+  transaction in their wallet. Show the transaction signature after
+  confirmation and explain when the vault lacks funds. Claimants need
+  Devnet SOL for transaction fees and any new account rent.
+- [ ] **Validate on Devnet.** Verify a funded claim, an immediate repeat
+  refusal, a claim at the 24-hour boundary, and simultaneous submissions
+  from the same wallet. Verify a second wallet can claim independently
+  and an insufficient vault balance leaves the claim record unchanged.
+  Confirm each successful claim decreases the vault balance and increases
+  the recipient balance by the same amount, with total wGRC supply unchanged.
 
 ### Phase 7 — Production Readiness
 
